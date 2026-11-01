@@ -1,0 +1,1 @@
+-- Overrides the default regen script: no passive healing. Drink from your flask.

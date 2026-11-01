@@ -1,0 +1,14 @@
+# local tooling / backups
+.claude/
+CLAUDE.md
+GEMINI.md
+graphify-out/
+.graphifyignore
+DGUS.rbxlx.bak
+DGUS.rbxlx.lock
+__pycache__/
+AGENTS.md
+.cursor/
+.cursorrules
+.github/copilot-instructions.md
+.mcp.json

@@ -1,0 +1,1 @@
+-- Overrides Roblox's default Animate script: the Puppeteer animates every character.
