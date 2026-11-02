@@ -463,4 +463,69 @@ function M.aura(char, strength)
 	add(wisps)
 end
 
+-- THE ARMOR OF A LION HUNTER (Config.Armor.PotbellyArmor; the Underfire's blazing chest): Caelen's bulk, forged by someone
+-- with more iron than taste. Thick dull grey, and on its BACK a great round barrel of iron bulging out behind (rivets
+-- round it, a knob in the middle), as if it carried its own hump; a belt cinched too tight, pot-lid pauldrons with a knob
+-- on top, round mitten gauntlets, huge ball knee cops, bucket greaves and stubby round toes. The skeleton under it is
+-- hidden, as under Caelen's (unwear brings it back).
+local GREY, GREY_DK, RIVET = Color3.fromRGB(126, 126, 124), Color3.fromRGB(86, 86, 88), Color3.fromRGB(56, 54, 52)
+function M.wearPotbelly(char)
+	if char:FindFirstChild("PotbellyArmor") then
+		return
+	end
+	local _, deco, size = M.kit(char, "PotbellyArmor")
+	local head = char:FindFirstChild("Head")
+	for _, d in ipairs(char:GetChildren()) do
+		local w = d:IsA("BasePart") and d:FindFirstChildOfClass("WeldConstraint")
+		if d:IsA("BasePart") and d ~= head and d.Name ~= "HumanoidRootPart" and not (w and w.Part0 == head) then
+			d:SetAttribute("PotbellyArmorT", d.Transparency)
+			d.Transparency = 1
+		end
+	end
+	local METAL, BALL, V, at = Enum.Material.Metal, Enum.PartType.Ball, Vector3.new, CFrame.new
+	local chest, hips = size("Chest"), size("Hips")
+	-- the hump: a ball of iron bigger than the chest, pushed out behind (+z), a ring of rivets round it and a boss in its
+	-- middle; a squarer shell, a flat breastplate in front, a short thick stovepipe of a gorget
+	local bd = chest.X * 1.55
+	deco("Chest", "Hump", V(bd, bd, bd), at(0, chest.Y * 0.05, chest.Z * 0.45), GREY, METAL, BALL)
+	deco("Chest", "Shell", V(chest.X * 1.3, chest.Y * 1.12, chest.Z * 1.5), at(0, 0.05, -0.05), GREY_DK, METAL)
+	deco("Chest", "Breastplate", V(chest.X * 1.25, chest.Y * 1.05, 0.4), at(0, 0, -chest.Z * 0.75 - 0.1), GREY, METAL)
+	for i = 0, 11 do
+		local a = (i / 12 - 0.5) * math.pi * 1.4 -- (round the back of the hump, side to side)
+		deco("Chest", "Rivet", V(0.16, 0.16, 0.16), at(math.sin(a) * bd * 0.5, chest.Y * 0.05, chest.Z * 0.45 + math.cos(a) * bd * 0.5), RIVET, METAL, BALL)
+	end
+	deco("Chest", "Boss", V(0.34, 0.34, 0.34), at(0, chest.Y * 0.25, chest.Z * 0.45 + bd * 0.48), RIVET, METAL, BALL)
+	deco("Chest", "Gorget", V(chest.X * 0.7, 0.7, chest.Z * 1.2), at(0, chest.Y * 0.58, 0), GREY_DK, METAL)
+	deco("Chest", "GorgetLip", V(chest.X * 0.8, 0.14, chest.Z * 1.3), at(0, chest.Y * 0.58 + 0.38, 0), GREY, METAL)
+	-- the waist: a heavy skirt, and a belt far too small for the belly over it, a little square buckle
+	deco("Hips", "Skirt", V(hips.X * 1.35, hips.Y * 1.15, hips.Z * 1.5), at(0, -0.05, 0), GREY_DK, METAL)
+	deco("Hips", "Belt", V(hips.X * 1.4, 0.2, hips.Z * 1.55), at(0, hips.Y * 0.42, 0), RIVET, Enum.Material.Leather)
+	deco("Hips", "Buckle", V(0.24, 0.22, 0.08), at(0, hips.Y * 0.42, -hips.Z * 0.78 - 0.02), GREY, METAL)
+	for _, side in ipairs({ "R", "L" }) do
+		local sx = side == "R" and 1 or -1
+		local ua, la, hand = size(side .. "UpperArm"), size(side .. "LowerArm"), size(side .. "Hand")
+		local th, sh, foot = size(side .. "Thigh"), size(side .. "Shin"), size(side .. "Foot")
+		local U, L = side .. "UpperArm", side .. "LowerArm"
+		-- pot lids for pauldrons, each with a knob on top; a thick sleeve, a ball at the elbow, a round mitten
+		local pd = ua.X * 2.7
+		deco(U, "Pauldron", V(pd, pd, pd), at(sx * 0.15, ua.Y / 2 - pd * 0.15, 0), GREY, METAL, BALL)
+		deco(U, "PauldronKnob", V(0.3, 0.3, 0.3), at(sx * 0.15, ua.Y / 2 + pd * 0.36, 0), RIVET, METAL, BALL)
+		deco(U, "Sleeve", V(ua.X * 1.6, ua.Y * 0.8, ua.Z * 1.6), at(0, -ua.Y * 0.1, 0), GREY_DK, METAL)
+		deco(L, "ElbowCop", V(la.X * 2, la.X * 2, la.X * 2), at(0, la.Y / 2, 0), GREY, METAL, BALL)
+		deco(L, "Vambrace", V(la.X * 1.65, la.Y * 0.9, la.Z * 1.65), at(0, -la.Y * 0.04, 0), GREY_DK, METAL)
+		local md = hand.X * 2
+		deco(side .. "Hand", "Mitten", V(md, md, md), at(0, -hand.Y * 0.1, 0), GREY, METAL, BALL)
+		-- the leg: a thick cuisse, a great ball of a knee, a bucket greave with a rim, a stubby round toe
+		local T, S2, F = side .. "Thigh", side .. "Shin", side .. "Foot"
+		deco(T, "Cuisse", V(th.X * 1.65, th.Y * 0.98, th.Z * 1.65), at(0, 0, 0), GREY, METAL)
+		local kd = th.X * 1.9
+		deco(S2, "KneeCop", V(kd, kd, kd), at(0, sh.Y / 2, -sh.Z * 0.2), GREY, METAL, BALL)
+		deco(S2, "Greave", V(sh.X * 1.7, sh.Y * 0.95, sh.Z * 1.7), at(0, -sh.Y * 0.05, 0), GREY_DK, METAL)
+		deco(S2, "GreaveRim", V(sh.X * 1.85, 0.14, sh.Z * 1.85), at(0, -sh.Y * 0.45, 0), GREY, METAL)
+		deco(F, "Sabaton", V(foot.X * 1.5, foot.Y * 1.4, foot.Z * 1.2), at(0, 0, 0.05), GREY_DK, METAL)
+		local td = foot.X * 1.5
+		deco(F, "Toe", V(td, td, td), at(0, 0, -foot.Z * 0.55), GREY, METAL, BALL)
+	end
+end
+
 return M

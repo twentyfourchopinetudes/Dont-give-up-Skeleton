@@ -104,6 +104,10 @@ local function enemyAI(e)
 			continue
 		end
 		local hum, root = e.hum, e.root
+		if e.spec.Ledge and root.Position.Y < e.home.Position.Y - 30 then -- (walked off its spire into the lava: gone, not stranded below)
+			hum.Health = 0
+			break
+		end
 		local homeDist = flat(root.Position - e.home.Position).Magnitude
 		local target = findTarget(e)
 		if target and homeDist > def.Leash then

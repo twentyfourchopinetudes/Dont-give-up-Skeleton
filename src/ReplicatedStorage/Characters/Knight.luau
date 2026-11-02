@@ -155,6 +155,36 @@ M.Weapons = {
 		w.add(w.mk("Ribbon", Vector3.new(0.06, 0.02, 0.9), Color3.fromRGB(120, 24, 22), Enum.Material.Fabric), 0.15, CFrame.new(0.1, 0, 0.5))
 		return { handle = handle, bladeLen = 0.4 }
 	end,
+	-- the Pyralis Fang: a wand of the Malformed Watchdog's fang, bound to a charred bone haft in gold wire, a coal of the
+	-- True one's dark-red fire caught in its hollow tip (it points along the handle's -Y, like a blade)
+	PyralisFang = function(w)
+		local handle = w.mk("Haft", Vector3.new(0.22, 1.0, 0.22), Color3.fromRGB(46, 30, 24), Enum.Material.Slate)
+		w.add(w.mk("Pommel", Vector3.new(0.3, 0.22, 0.3), Color3.fromRGB(150, 112, 52), Enum.Material.Metal), 0.55)
+		for i = 0, 2 do
+			w.add(w.mk("Wire", Vector3.new(0.26, 0.05, 0.26), Color3.fromRGB(176, 140, 66), Enum.Material.Metal), 0.3 - i * 0.3)
+		end
+		w.add(w.mk("Fang", Vector3.new(0.2, 1.1, 0.24), Color3.fromRGB(206, 192, 160), Enum.Material.SmoothPlastic), -1.0, CFrame.Angles(0.12, 0, 0))
+		w.add(w.mk("FangTip", Vector3.new(0.12, 0.5, 0.15), Color3.fromRGB(226, 214, 186), Enum.Material.SmoothPlastic), -1.75, CFrame.Angles(0.3, 0, 0), -0.12)
+		for _, sx in ipairs({ -1, 1 }) do -- (two lesser teeth flaring off its root)
+			w.add(w.mk("Tooth", Vector3.new(0.08, 0.45, 0.1), Color3.fromRGB(196, 180, 150), Enum.Material.SmoothPlastic), -0.55, CFrame.new(sx * 0.14, 0, 0) * CFrame.Angles(0, 0, sx * 0.5))
+		end
+		local coal = w.mk("Coal", Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(185, 25, 15), Enum.Material.Neon)
+		w.add(coal, -1.45, nil, -0.05)
+		local function setup(h)
+			local light = Instance.new("PointLight")
+			light.Color, light.Range, light.Brightness = Color3.fromRGB(200, 40, 20), 8, 1.4
+			light.Parent = coal
+			local fire = Instance.new("ParticleEmitter")
+			fire.Texture = "rbxasset://textures/particles/fire_main.dds"
+			fire.Color = ColorSequence.new(Color3.fromRGB(230, 50, 30), Color3.fromRGB(60, 6, 4))
+			fire.Size = NumberSequence.new(0.35, 0)
+			fire.Transparency = NumberSequence.new(0.3, 1)
+			fire.Lifetime, fire.Rate, fire.Speed = NumberRange.new(0.3, 0.6), 22, NumberRange.new(0.5, 1.5)
+			fire.LightEmission, fire.Acceleration = 0.4, Vector3.new(0, 4, 0)
+			fire.Parent = coal
+		end
+		return { handle = handle, bladeLen = 1.8, setup = setup }
+	end,
 	-- the Old Book's dark twin: near-black boards, violet runes glowing on its pages
 	DarkBook = function(w)
 		local handle = w.mk("Spine", Vector3.new(0.14, 0.1, 1.4), Color3.fromRGB(22, 14, 30), Enum.Material.Leather)
@@ -205,6 +235,10 @@ M.Grips = {
 	BRead = { Vector3.new(0.25, 0.75, -1.2), CFrame.Angles(math.rad(53), 0, 0) },
 	-- casting: thrust out at arm's length, pages to the target
 	BCast = { Vector3.new(0.4, 1.0, -2.0), CFrame.Angles(math.rad(-90), 0, 0) },
+	-- the wand, held low at your side and angled ahead (no body pose of its own: you stand up straight), and drawn up
+	-- and back over the shoulder before a cast
+	WHold = { Vector3.new(1.0, -0.2, -0.9), CFrame.Angles(math.rad(-55), 0, 0) },
+	WDraw = { Vector3.new(1.1, 1.3, 0.2), CFrame.Angles(math.rad(-150), 0, 0) },
 }
 M.BodyFor = { BRead = "Read" } -- reading: head bowed over it
 
@@ -563,6 +597,116 @@ end
 -- enemy in it for Pct % of its MAX health (x the weapon's Scaling, so Darkness). Stops at the first wall;
 -- a roll or a hit (which bump attackId) cuts it off.
 local PURPLE, PURPLE_CORE = Color3.fromRGB(62, 20, 125), Color3.fromRGB(130, 80, 195)
+local VIOLET, ABYSS = Color3.fromRGB(150, 40, 190), Color3.fromRGB(30, 14, 70) -- (the beam's colour drifts between these)
+local SPARKLE, SMOKE_TEX = "rbxasset://textures/particles/sparkles_main.dds", "rbxasset://textures/particles/smoke_main.dds"
+-- what keeps the beam from being a plain bar (made once a cast, moved every frame by laserFxStep): tendrils writhing
+-- round it, a smoky sheath crawling along it, a sigil turning at the book (two rings, shards wheeling round them),
+-- motes drifting off its whole length, and dark smoke and sparks pouring off the pages
+local function laserFx(part, outer, L)
+	local w = L.Width
+	local fx = { tendrils = {}, shards = {}, rings = {} }
+	local function ends()
+		local a0, a1 = Instance.new("Attachment"), Instance.new("Attachment")
+		a0.Parent, a1.Parent = outer, outer
+		return a0, a1
+	end
+	for i = 1, 3 do -- (three, a third of a turn apart, each on its own pair of attachments so it can twist)
+		local a0, a1 = ends()
+		local b = Instance.new("Beam")
+		b.Attachment0, b.Attachment1 = a0, a1
+		b.Texture, b.TextureMode, b.TextureLength, b.TextureSpeed = SPARKLE, Enum.TextureMode.Wrap, 4, 2 + i
+		b.Color = ColorSequence.new(PURPLE_CORE, VIOLET)
+		b.LightEmission, b.LightInfluence, b.Segments, b.FaceCamera = 1, 0, 24, true
+		b.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.7, 0.35), NumberSequenceKeypoint.new(1, 1) })
+		b.Parent = outer
+		fx.tendrils[i] = { a0 = a0, a1 = a1, beam = b }
+	end
+	local haze = Instance.new("Beam")
+	fx.h0, fx.h1 = ends()
+	haze.Attachment0, haze.Attachment1 = fx.h0, fx.h1
+	haze.Texture, haze.TextureMode, haze.TextureLength, haze.TextureSpeed = SMOKE_TEX, Enum.TextureMode.Wrap, 6, -1.5
+	haze.Color, haze.LightEmission, haze.LightInfluence, haze.FaceCamera = ColorSequence.new(ABYSS, PURPLE), 0.4, 0, true
+	haze.Transparency = NumberSequence.new(0.55, 1)
+	haze.Parent = outer
+	fx.haze = haze
+	for i = 1, 2 do
+		fx.rings[i] = part(Enum.PartType.Cylinder, i == 1 and PURPLE_CORE or VIOLET, 0.25)
+	end
+	for i = 1, 6 do
+		local s = part(Enum.PartType.Block, i % 2 == 0 and PURPLE_CORE or VIOLET, 0.1)
+		s.Size = Vector3.new(0.08, 0.08, 0.45) * w
+		fx.shards[i] = s
+	end
+	-- motes off the beam's whole length (its outer box is the emitter's volume)
+	local motes = Instance.new("ParticleEmitter")
+	motes.Texture, motes.Shape, motes.ShapeStyle = SPARKLE, Enum.ParticleEmitterShape.Box, Enum.ParticleEmitterShapeStyle.Volume
+	motes.Color = ColorSequence.new(PURPLE_CORE, VIOLET)
+	motes.Size = NumberSequence.new(0.35 * w, 0)
+	motes.Transparency = NumberSequence.new(0, 1)
+	motes.Lifetime, motes.Speed, motes.SpreadAngle = NumberRange.new(0.35, 0.8), NumberRange.new(1, 4), Vector2.new(180, 180)
+	motes.LightEmission, motes.Rate, motes.RotSpeed = 1, 60, NumberRange.new(-200, 200)
+	motes.Parent = outer
+	fx.motes = motes
+	-- smoke and sparks off the pages, from the sigil's hub at the book
+	local hub = part(Enum.PartType.Ball, PURPLE, 1)
+	local smoke = Instance.new("ParticleEmitter")
+	smoke.Texture, smoke.Color = SMOKE_TEX, ColorSequence.new(PURPLE, ABYSS)
+	smoke.Size = NumberSequence.new(0.4 * w, 2 * w)
+	smoke.Transparency = NumberSequence.new(0.4, 1)
+	smoke.Lifetime, smoke.Speed, smoke.SpreadAngle = NumberRange.new(0.5, 1), NumberRange.new(1.5, 3), Vector2.new(60, 60)
+	smoke.Rate, smoke.RotSpeed, smoke.Acceleration = 30, NumberRange.new(-60, 60), Vector3.new(0, 2, 0)
+	smoke.Parent = hub
+	local sparks = Instance.new("ParticleEmitter")
+	sparks.Texture, sparks.Color, sparks.LightEmission = SPARKLE, ColorSequence.new(PURPLE_CORE), 1
+	sparks.Size = NumberSequence.new(0.25, 0)
+	sparks.Lifetime, sparks.Speed, sparks.SpreadAngle, sparks.Rate = NumberRange.new(0.2, 0.45), NumberRange.new(6, 12), Vector2.new(70, 70), 40
+	sparks.Parent = hub
+	fx.emitters = { motes, smoke, sparks }
+	fx.beams = { haze, fx.tendrils[1].beam, fx.tendrils[2].beam, fx.tendrils[3].beam }
+	fx.parts = { hub, fx.rings[1], fx.rings[2], table.unpack(fx.shards) }
+	fx.hub = hub
+	return fx
+end
+-- one frame of it: o the book, tip where it burns, len between, t seconds since the cast
+local function laserFxStep(fx, outer, core, flare, L, o, tip, len, t)
+	local w = L.Width
+	local pulse = 1 + 0.18 * math.sin(t * 14) + 0.08 * math.sin(t * 31)
+	local shift = (math.sin(t * 2.6) + 1) / 2
+	outer.Size = Vector3.new(w * pulse, w * pulse, len)
+	core.Size = Vector3.new(w * 0.4 * (1 + 0.3 * math.sin(t * 22)), w * 0.4 * (1 + 0.3 * math.sin(t * 19 + 1)), len)
+	outer.Color = PURPLE:Lerp(VIOLET, shift * 0.7):Lerp(ABYSS, (1 - shift) * 0.3)
+	core.Color = PURPLE_CORE:Lerp(Color3.new(1, 1, 1), 0.15 + 0.15 * math.sin(t * 9))
+	flare.Size = Vector3.one * w * (1.6 + 0.5 * math.sin(t * 11))
+	-- (in the outer box's own space its +Z end is the book, -Z the tip)
+	local curve = math.min(len * 0.1, 3.5) * w
+	for i, td in ipairs(fx.tendrils) do
+		local a = math.deg(t * (4 + i * 0.7)) + i * 120
+		td.a0.Position, td.a1.Position = Vector3.new(0, 0, len / 2), Vector3.new(0, 0, -len / 2)
+		td.a0.Orientation = Vector3.new(0, 0, a)
+		td.a1.Orientation = Vector3.new(0, 0, a + 140 + 60 * math.sin(t * 3 + i))
+		td.beam.CurveSize0 = curve * (0.6 + 0.4 * math.sin(t * 5 + i * 2))
+		td.beam.CurveSize1 = -curve * (0.6 + 0.4 * math.cos(t * 4 + i))
+		local tw = w * (0.35 + 0.15 * math.sin(t * 13 + i * 2))
+		td.beam.Width0, td.beam.Width1 = tw * 1.4, tw * 0.5
+	end
+	fx.h0.Position, fx.h1.Position = Vector3.new(0, 0, len / 2), Vector3.new(0, 0, -len / 2)
+	fx.haze.Width0, fx.haze.Width1 = w * (2.6 + 0.6 * math.sin(t * 6)), w * (1.4 + 0.4 * math.sin(t * 7 + 2))
+	fx.motes.Rate = math.clamp(len * 2.5, 10, 150)
+	-- the sigil at the book: two rings breathing out of step, shards wheeling round them, tumbling
+	local face = CFrame.lookAt(o, tip)
+	fx.hub.CFrame = face
+	for i, r in ipairs(fx.rings) do
+		local d = w * (i == 1 and 2.2 or 3.2) * (1 + 0.15 * math.sin(t * 6 + i * 2))
+		r.Size = Vector3.new(0.06, d, d)
+		r.Transparency = 0.2 + 0.3 * (math.sin(t * 8 + i * 3) + 1) / 2
+		r.CFrame = face * CFrame.new(0, 0, -0.4 * i * w) * CFrame.Angles(0, math.pi / 2, 0) -- (a cylinder's axis is its X: turned down the beam)
+	end
+	local rad = w * (1.6 + 0.35 * math.sin(t * 4))
+	for i, s in ipairs(fx.shards) do
+		local a = t * (i % 2 == 0 and 5 or -4) + i / #fx.shards * math.pi * 2
+		s.CFrame = face * CFrame.new(math.cos(a) * rad, math.sin(a) * rad, -0.6 * w + 0.2 * math.sin(t * 7 + i)) * CFrame.Angles(t * 6 + i, t * 4, a)
+	end
+end
 function castLaser(player, st, a, aim, id)
 	local char, _, hrp = aliveChar(player)
 	local L = a.Laser
@@ -583,6 +727,7 @@ function castLaser(player, st, a, aim, id)
 	local light = Instance.new("PointLight")
 	light.Color, light.Range, light.Brightness = PURPLE_CORE, 14, 2
 	light.Parent = flare
+	local fx = laserFx(part, outer, L)
 	playSound(hrp, SOUNDS.FireCast, 0.7, 0.6)
 	local wallParams = RaycastParams.new()
 	wallParams.FilterDescendantsInstances = { char, EnemiesFolder, outer, core, flare }
@@ -595,7 +740,13 @@ function castLaser(player, st, a, aim, id)
 			st.busyUntil, st.attackAt = now() + 0.3, now() + 0.25
 			pose(st, "Idle", 0.2)
 		end
-		for _, p in ipairs({ outer, core, flare }) do
+		for _, e in ipairs(fx.emitters) do
+			e.Enabled = false
+		end
+		for _, bm in ipairs(fx.beams) do
+			bm.Enabled = false
+		end
+		for _, p in ipairs({ outer, core, flare, table.unpack(fx.parts) }) do
 			game:GetService("TweenService"):Create(p, TweenInfo.new(0.12), { Transparency = 1 }):Play()
 			Debris:AddItem(p, 0.2)
 		end
@@ -619,8 +770,8 @@ function castLaser(player, st, a, aim, id)
 		local len = wall and wall.Distance or L.Range
 		local tip = o + dir * len
 		local cf = CFrame.lookAt(o + dir * len / 2, tip)
-		outer.Size, core.Size = Vector3.new(L.Width, L.Width, len), Vector3.new(L.Width * 0.4, L.Width * 0.4, len)
 		outer.CFrame, core.CFrame, flare.CFrame = cf, cf, CFrame.new(tip)
+		laserFxStep(fx, outer, core, flare, L, o, tip, len, t - t0)
 		if t - lastBurst > 0.2 then -- (sparks where it burns)
 			lastBurst = t
 			burst(tip, PURPLE, 6, 0.3, 8)

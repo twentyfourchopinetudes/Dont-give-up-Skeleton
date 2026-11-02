@@ -146,6 +146,8 @@ local SOUNDS = {
 	-- into breaths; paste a breathing asset id here for a real one.
 	Breath = "",
 	Impact = "rbxasset://sounds/collide.wav",
+	WatchdogSmash = "rbxassetid://74149238738530", -- the Malformed Watchdog's twisting leap landing
+	WatchdogBlast = "rbxassetid://94138990589559", -- its tail slash letting go
 	Deflect = "rbxassetid://8820780818", -- crisp parry / deflect clash
 	-- the Old Book's fireball: its cast (a whoosh; "" = silent - paste a fire-whoosh asset id
 	-- here) and its burst (Roblox's built-in explosion)
@@ -1204,7 +1206,7 @@ local function dropSplinter(pos, ignore)
 			pp.Enabled = false
 			p:Destroy()
 			pl:SetAttribute("Splinters", (pl:GetAttribute("Splinters") or 0) + 1)
-			FxRemote:FireClient(pl, "Message", "Bone Splinter. Still warm with what it held. Rest at a bonfire to grow stronger.")
+			FxRemote:FireClient(pl, "Message", "Bone Splinter. Rest at a bonfire to grow stronger.")
 		end)
 	end)
 end
@@ -1286,7 +1288,7 @@ end
 -- false (and nothing changes) if they lack the weapon's Strength (armor's counts)
 local function equipWeapon(pl, kind)
 	local st, def = states[pl], Config.Weapons[kind]
-	if not (st and def) or Config.statOf(pl, "Strength") < (def.Strength or 0) then
+	if not (st and def) or Config.statOf(pl, "Strength") < (def.Strength or 0) or Config.statOf(pl, "Fire") < (def.FireReq or 0) then
 		return false
 	end
 	pl:SetAttribute("Weapon", kind)

@@ -117,7 +117,11 @@ ActionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3)
 		local def = typeof(arg) == "string" and Config.Weapons[arg]
 		if st and def and (arg == "Sword" or player:GetAttribute("Has_" .. arg)) and now() >= st.busyUntil then
 			if not Core.equipWeapon(player, arg) then
-				FxRemote:FireClient(player, "Message", def.Name .. " is too heavy for you. It needs " .. def.Strength .. " Strength.")
+				if def.FireReq and Config.statOf(player, "Fire") < def.FireReq then
+					FxRemote:FireClient(player, "Message", def.Name .. " won't answer you. It needs " .. def.FireReq .. " Fire.")
+				else
+					FxRemote:FireClient(player, "Message", def.Name .. " is too heavy for you. It needs " .. def.Strength .. " Strength.")
+				end
 			end
 		end
 	elseif action == "WearArmor" and typeof(arg) == "string" and Config.Armor[arg] and player:GetAttribute(arg) == true then
@@ -757,7 +761,7 @@ function dressArmor(player, char)
 	if not worn.Motley then
 		Roster.byKind.Taylor.unwear(char)
 	end
-	for _, key in ipairs({ "DarkCloak", "DarkHood", "CaelenArmor" }) do
+	for _, key in ipairs({ "DarkCloak", "DarkHood", "CaelenArmor", "PotbellyArmor" }) do
 		if not worn[key] then
 			Armor.unwear(char, key)
 		end
@@ -777,6 +781,9 @@ function dressArmor(player, char)
 	end
 	if worn.CaelenArmor then
 		Armor.wearCaelen(char)
+	end
+	if worn.PotbellyArmor then
+		Armor.wearPotbelly(char)
 	end
 	if worn.DarkHood then
 		Armor.wearDarkHood(char)
@@ -862,7 +869,7 @@ for _, ch in ipairs(Map.KeepChests) do
 end
 
 -- the mushroom huts' chests (MapBuilder: MushroomChests): unlocked, opened once (for everyone); each holds
--- one item, a player attribute (the Bleak Manor key, the Dark Book, the Foul Dagger)
+-- one item, a player attribute (the Bleak Manor key, the Foul Dagger; the Dark Book's is empty - Aldous drops it now)
 for _, ch in ipairs(Map.MushroomChests) do
 	ch.Prompt.Triggered:Connect(function(player)
 		if not ch.Prompt.Enabled then
@@ -872,7 +879,9 @@ for _, ch in ipairs(Map.MushroomChests) do
 		local swung = ch.Hinge * CFrame.Angles(math.rad(110), 0, 0) * ch.Hinge:Inverse() * ch.Lid.CFrame
 		TweenService:Create(ch.Lid, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = swung }):Play()
 		playSound(ch.Lid, SOUNDS.Unsheath, 0.6, 0.6)
-		player:SetAttribute(ch.Item.Attr, true)
+		if ch.Item.Attr then -- (an empty one has none)
+			player:SetAttribute(ch.Item.Attr, true)
+		end
 		FxRemote:FireClient(player, "Message", ch.Item.Text)
 	end)
 end
@@ -1140,6 +1149,18 @@ ActionRemote.OnServerEvent:Connect(function(player, action)
 		Champion.devWound()
 	elseif action == "DevConsulHP" and Config.Debug then
 		Roster.byKind.Consul.devWound()
+	elseif action == "DevBulwark" and Config.Debug then
+		local char = aliveChar(player)
+		if char and Map.Bulwark then
+			char:PivotTo(Map.Bulwark.Dev)
+		end
+	elseif action == "DevPyralis" and Config.Debug then
+		-- the way east's last stretch, ten short of the arena's gate, facing it
+		local char = aliveChar(player)
+		local door = Map.Underfire and Map.Underfire.Arena and Map.Underfire.Arena.Door
+		if char and door then
+			char:PivotTo(CFrame.lookAt(door + Vector3.new(0, 3.2, -10), door + Vector3.new(0, 3.2, 20)))
+		end
 	end
 end)
 
@@ -1566,6 +1587,935 @@ local function zoneAt(pos)
 	return nil
 end
 
+-- The breach at the end of the Fallen Cellblock (Map.Underfire): the first time you reach its lip, a cutscene - the
+-- knight creeps out, falters, leaps into the burning pit and is gone into the dark - then he stands in the buried room
+-- below and the camera looks it over. Later (quick), dropping into the pit just cuts there.
+-- The Malformed Watchdog, in Pyralis's arena. The first time anyone steps off the north bridge onto the island, its
+-- entrance: everyone on the island held while it hauls itself out of its lair (PyralisProto's clients pose it off EmergeAt)
+-- and fixes on you. Then it fights: a stand-in among the enemies to lock onto and hit, its health bar up whenever someone
+-- alive is on the island, and every few seconds the twisting leap or the helix of fire.
+if Map.Underfire and Map.Underfire.Arena then
+	local ok, err = pcall(function() -- (a prototype must never stop the server starting)
+		local Proto = require(ReplicatedStorage:WaitForChild("PyralisProto"))
+		local Ar = Map.Underfire.Arena
+		local model = Proto.build(Ar.Centre)
+		local function onIsland(p)
+			return p.X > Ar.MinX and p.X < Ar.MaxX and p.Z > Ar.MinZ and p.Z < Ar.MaxZ and math.abs(p.Y - Ar.Centre.Y - 4) < 12
+		end
+		local shown, nextLeap, proxy = false, 0, nil
+		local sinceLeap, leapEvery = 0, 3 -- (with its brother down: attacks since its last leap, and how many before the next)
+		local fighters = {} -- (who's stepped onto the island against it since it was last whole: player -> their character)
+		-- what blows and spells land on, standing: all of it from the floor to over its head, its forelegs to its neck (where the
+		-- lock-on sits on every screen, so a beam or a fireball aimed at it passes through this)
+		local TARGET_SIZE, TARGET_OFF = Vector3.new(12, 20, 18), Vector3.new(0, 10, -5)
+		-- THE TRUE WATCHDOG OF PYRALIS, its brother (PyralisProto design D): down on the island once the Malformed one is a
+		-- third gone. Its own stand-in, its own bar (Boss2*), its own mind: keeping well away from its brother, it flies to the
+		-- pillars to rain fire down (the volley, the sunfall), or on the ground beats a gale of fire at you or dives through you.
+		local T -- (the one on the island now, if any: { model, dead, destroy })
+		-- THE GATES (Map.Bulwark): the north gate's portcullis down while anyone's on the island and a brother lives, once
+		-- the fight's begun; the lair's once the Malformed one is out of it. Both up for good when the two are slain, and the
+		-- lair's back wall opens (its door sinks, its murk lifts, its lamps come on) onto the way to the great lift
+		local Bw = Map.Bulwark
+		local malDead, won, emergedAt = false, false, nil
+		local gateDown, gateBase = {}, {}
+		local function setGate(i, down)
+			local g = Bw and Bw.Gates[i]
+			if not g or (gateDown[i] or false) == down then
+				return
+			end
+			gateDown[i] = down
+			for _, p in ipairs(g.Parts) do
+				gateBase[p] = gateBase[p] or p.CFrame
+				local info = down and TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In) or TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+				TweenService:Create(p, info, { CFrame = gateBase[p] - Vector3.new(0, down and g.Up or 0, 0) }):Play()
+			end
+			g.Blocker.CanCollide = down
+			playSound(g.Parts[1], down and SOUNDS.Impact or SOUNDS.Unsheath, 2.5, down and 0.5 or 0.4)
+		end
+		task.spawn(function()
+			while true do
+				task.wait(0.25)
+				local anyIn = false
+				for _, pl in ipairs(Players:GetPlayers()) do
+					local char, _, hrp = aliveChar(pl)
+					anyIn = anyIn or (char ~= nil and onIsland(hrp.Position))
+				end
+				emergedAt = emergedAt or model:GetAttribute("EmergeAt")
+				local on = anyIn and emergedAt ~= nil and not won and (not malDead or (T ~= nil and not T.dead))
+				setGate(1, on)
+				setGate(2, on and workspace:GetServerTimeNow() - emergedAt > Proto.Total)
+			end
+		end)
+		local function openLair()
+			local L = Bw and Bw.Lair
+			if not L then
+				return
+			end
+			TweenService:Create(L.Door, TweenInfo.new(5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = L.Door.CFrame - Vector3.new(0, 21, 0) }):Play()
+			L.Door.CanCollide = false
+			playSound(L.Door, SOUNDS.Impact, 3, 0.35)
+			for _, m in ipairs(L.Murk) do
+				TweenService:Create(m, TweenInfo.new(4), { Transparency = 1 }):Play()
+			end
+			for _, l in ipairs(L.Lamps) do
+				l.Enabled = true
+			end
+			FxRemote:FireAllClients("Message", "Deep in the lair, stone grinds open.")
+		end
+		-- one brother slain: only once the other's down too (or never came) the victory, and two splinters where the last fell
+		local function felled(at)
+			if (T == nil or T.dead) and not (proxy and proxy.Parent and proxy.Humanoid.Health > 0) then
+				FxRemote:FireAllClients("Banner", "WATCHDOGS FELLED", "Victory")
+				won = true
+				task.delay(3, openLair)
+				at = Vector3.new(at.X, Ar.Centre.Y + 3, at.Z) -- (on the floor, not on the spire it fell from)
+				for _, sp in ipairs(Ar.Spires or {}) do
+					local off = Vector3.new(at.X - sp[1], 0, at.Z - sp[2])
+					if off.Magnitude < 7 then
+						at += (off.Magnitude > 0.1 and off.Unit or Vector3.new(1, 0, 0)) * (7 - off.Magnitude)
+					end
+				end
+				Core.dropSplinter(at + Vector3.new(3, 0, 0))
+				Core.dropSplinter(at + Vector3.new(-3, 0, 2))
+				for _, pl in ipairs(Players:GetPlayers()) do -- (and their fang, to everyone who fought them on the island)
+					local char, _, hrp = aliveChar(pl)
+					if char and onIsland(hrp.Position) and not pl:GetAttribute("Has_PyralisFang") then
+						pl:SetAttribute("Has_PyralisFang", true)
+						FxRemote:FireClient(pl, "Message", Config.Weapons.PyralisFang.Name .. ". Press T to choose weapons and armor.")
+					end
+				end
+			end
+		end
+		local function flatDist(a, b)
+			return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+		end
+		local function spawnTrue()
+			local FY = Ar.Centre.Y
+			local function brother() -- (where the Malformed one stands, while it lives)
+				return model.Parent and proxy and proxy.Parent and proxy.Humanoid.Health > 0 and (model:GetAttribute("LeapTo") or model:GetAttribute("Base").Position) or nil
+			end
+			local function onIt()
+				local list = {}
+				for _, pl in ipairs(Players:GetPlayers()) do
+					local char, _, hrp = aliveChar(pl)
+					if char and states[pl] and onIsland(hrp.Position) then
+						table.insert(list, { pl, hrp })
+					end
+				end
+				return list
+			end
+			-- somewhere on the island to stand: clear of the pillars, far from its brother, about 24 from tp (if given)
+			local function spot(tp)
+				local best, bs
+				for _ = 1, 24 do
+					local p = Vector3.new(math.random(Ar.MinX + 10, Ar.MaxX - 10), FY, math.random(Ar.MinZ + 10, Ar.MaxZ - 10))
+					local clear = true
+					for _, list in ipairs({ Ar.Pillars, Ar.Spires }) do
+						for _, pi in ipairs(list) do
+							if flatDist(p, Vector3.new(pi[1], 0, pi[2])) < pi[3] + 5 then
+								clear = false
+							end
+						end
+					end
+					if clear then
+						local b = brother()
+						local s = (b and math.min(flatDist(p, b), 80) or 0) - (tp and math.abs(flatDist(p, tp) - 24) * 0.8 or 0)
+						if not bs or s > bs then
+							best, bs = p, s
+						end
+					end
+				end
+				return best or Ar.Centre
+			end
+			-- its entrance: a dive out of the dark, from high and far off its brother's side, down onto a ring it marks under
+			-- one of you - a slam where it lands
+			local list0 = onIt()
+			local tp0 = #list0 > 0 and list0[math.random(#list0)][2].Position or spot(nil)
+			local home = Vector3.new(math.clamp(tp0.X, Ar.MinX + 8, Ar.MaxX - 8), FY, math.clamp(tp0.Z, Ar.MinZ + 8, Ar.MaxZ - 8))
+			local away = brother() and Vector3.new(home.X - brother().X, 0, home.Z - brother().Z) or Vector3.new(0, 0, -1)
+			away = away.Magnitude > 0.1 and away.Unit or Vector3.new(0, 0, -1)
+			local tm = Proto.buildTrue(home)
+			local self = { model = tm, dead = false }
+			local function pos()
+				return (Proto.trueAt(tm, workspace:GetServerTimeNow()))
+			end
+			local function setMove(from, to, arc, dur, kind)
+				tm:SetAttribute("MoveFrom", from)
+				tm:SetAttribute("MoveTo", to)
+				tm:SetAttribute("MoveArc", arc)
+				tm:SetAttribute("MoveTime", dur)
+				tm:SetAttribute("MoveKind", kind)
+				tm:SetAttribute("MoveAt", workspace:GetServerTimeNow())
+			end
+			setMove(home + away * 45 + Vector3.new(0, 55, 0), home, 0, Proto.EnterTime, "dive")
+			tm:SetAttribute("EnterTo", home)
+			tm:SetAttribute("EnterAt", workspace:GetServerTimeNow())
+			tm.Parent = workspace:FindFirstChild("PyralisProtos")
+			-- its stand-in among the enemies: what you lock onto and hit, kept on its body wherever it flies
+			local px = Instance.new("Model")
+			px.Name = Proto.TrueName
+			px:SetAttribute("Boss", true)
+			px:SetAttribute("Radius", 3.5)
+			local root = Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Size = Vector3.new(7, 15, 7)
+			root.Anchored, root.CanCollide, root.CanTouch, root.Transparency = true, false, false, 1
+			root.CFrame = CFrame.new(pos() + Vector3.new(0, 7.5, 0))
+			root.Parent = px
+			local hum = Instance.new("Humanoid")
+			hum.MaxHealth, hum.Health = Proto.TrueHP, Proto.TrueHP
+			hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+			hum.Parent = px
+			px.PrimaryPart = root
+			px.Parent = Core.EnemiesFolder
+			local follow = game:GetService("RunService").Heartbeat:Connect(function()
+				root.CFrame = CFrame.new(pos() + Vector3.new(0, 7.5, 0))
+			end)
+			local function live()
+				return not self.dead and tm.Parent ~= nil and hum.Health > 0
+			end
+			local function hold(s)
+				local untilT = now() + s
+				while now() < untilT do
+					task.wait(0.05)
+					if not live() then
+						return false
+					end
+				end
+				return true
+			end
+			local function flyTo(p, arc, speed, kind)
+				local from = pos()
+				local d = (p - from).Magnitude
+				local dur = math.max(0.5, d / (speed or 36))
+				tm:SetAttribute("Perched", false)
+				setMove(from, p, arc or math.min(16, 4 + d * 0.2), dur, kind)
+				return hold(dur)
+			end
+			local function hurt(list, amount, from, kind)
+				for _, e in ipairs(list) do
+					Core.damagePlayer(e[1], amount, from, kind)
+				end
+			end
+			local function within(at, r, dy) -- (everyone alive within r of at, flat, and dy of its height)
+				local out = {}
+				for _, e in ipairs(onIt()) do
+					if flatDist(e[2].Position, at) < r and math.abs(e[2].Position.Y - at.Y) < dy then
+						table.insert(out, e)
+					end
+				end
+				return out
+			end
+			-- up onto one of its spires (the one furthest from its brother), crouched on top facing the centre
+			local function perch()
+				local b, best, bs = brother(), nil, nil
+				for _, sp in ipairs(Ar.Spires) do
+					local s = (b and flatDist(Vector3.new(sp[1], 0, sp[2]), b) or 0) + math.random() * 12
+					if not bs or s > bs then
+						best, bs = sp, s
+					end
+				end
+				local top = Vector3.new(best[1], best[4], best[2])
+				local d = Vector3.new(Ar.Centre.X - top.X, 0, Ar.Centre.Z - top.Z)
+				d = d.Magnitude > 0.1 and d.Unit or Vector3.new(0, 0, -1)
+				if not flyTo(top, 8, 34) then
+					return false
+				end
+				tm:SetAttribute("PerchYaw", math.atan2(-d.X, -d.Z))
+				tm:SetAttribute("Perched", true)
+				return hold(0.35)
+			end
+			local function mouth()
+				local yaw = tm:GetAttribute("PerchYaw") or 0
+				return pos() + Vector3.new(-math.sin(yaw), 0, -math.cos(yaw)) * 3.5 + Vector3.new(0, 13, 0) -- (its head, crouched)
+			end
+			local function volley() -- three balls of fire, one after another, each where someone stands now
+				if not perch() then
+					return
+				end
+				for _ = 1, 3 do
+					local list = onIt()
+					if #list == 0 then
+						break
+					end
+					local tp = list[math.random(#list)][2].Position
+					local to = Vector3.new(tp.X, FY, tp.Z)
+					tm:SetAttribute("ShotFrom", mouth())
+					tm:SetAttribute("ShotTo", to)
+					tm:SetAttribute("ShotAt", workspace:GetServerTimeNow())
+					playSound(root, SOUNDS.FireCast, 2, 0.8)
+					task.delay(Proto.ShotTime, function()
+						if not self.dead then
+							playSound(root, SOUNDS.FireHit, 1.6, 0.9)
+							hurt(within(to, Proto.ShotR, 7), 22, to, "Large")
+						end
+					end)
+					if not hold(0.55) then
+						return
+					end
+				end
+				hold(0.3)
+			end
+			local function sunfall(tp) -- a sun swollen over its head, hurled down; the ground it strikes left burning
+				if not perch() then
+					return
+				end
+				local to = Vector3.new(tp.X, FY, tp.Z)
+				tm:SetAttribute("SunTo", to)
+				tm:SetAttribute("SunAt", workspace:GetServerTimeNow())
+				playSound(root, SOUNDS.Groan, 2, 0.4)
+				task.delay(Proto.SunCharge, function()
+					if not self.dead then
+						playSound(root, SOUNDS.FireCast, 3, 0.5)
+					end
+				end)
+				if not hold(Proto.SunCharge + Proto.SunFall) then
+					return
+				end
+				Core.shockwave(to, Proto.SunR)
+				playSound(root, SOUNDS.FireHit, 3, 0.6)
+				hurt(within(to, Proto.SunR, 8), 38, to, "Knockdown")
+				-- (the pool burns on while it swoops down)
+				task.spawn(function() -- (the pool: burning whoever stands in it)
+					local untilT = now() + Proto.SunBurn
+					while now() < untilT and not self.dead do
+						task.wait(0.5)
+						hurt(within(to, Proto.PoolR, 6), 7, to, "Small")
+					end
+				end)
+				hold(0.3)
+			end
+			local function gale(tp) -- wings drawn back, then two beats of fire rolling out across a wide cone
+				local from = pos()
+				local d = tp - from
+				local yaw = math.atan2(-d.X, -d.Z)
+				tm:SetAttribute("FaceYaw", yaw)
+				tm:SetAttribute("GaleYaw", yaw)
+				tm:SetAttribute("GaleAt", workspace:GetServerTimeNow())
+				playSound(root, SOUNDS.Groan, 2, 0.6)
+				for beat = 0, 1 do
+					task.delay(Proto.GaleWind + beat * Proto.GaleGap, function()
+						if self.dead then
+							return
+						end
+						playSound(root, SOUNDS.FireCast, 2.5, 0.7 + beat * 0.1)
+						for _, e in ipairs(onIt()) do
+							if Proto.galeHit(from, yaw, e[2].Position) then
+								Core.damagePlayer(e[1], 18, from, "Large")
+							end
+						end
+					end)
+				end
+				hold(Proto.GaleTime)
+				tm:SetAttribute("FaceYaw", nil)
+			end
+			local function dive(tp) -- up, and down onto where you stood, talons first: only the slam as it lands hurts
+				local from = pos()
+				local to = Vector3.new(math.clamp(tp.X, Ar.MinX + 8, Ar.MaxX - 8), FY, math.clamp(tp.Z, Ar.MinZ + 8, Ar.MaxZ - 8))
+				playSound(root, SOUNDS.Groan, 2, 0.7)
+				local dur = math.max(0.95, (to - from).Magnitude / 44) -- (time enough to see its mark and get off it)
+				tm:SetAttribute("Perched", false)
+				setMove(from, to, 10, dur, "dive")
+				tm:SetAttribute("DiveTo", to)
+				tm:SetAttribute("DiveTime", dur)
+				tm:SetAttribute("DiveAt", workspace:GetServerTimeNow())
+				if hold(dur) then
+					Core.shockwave(to, Proto.DiveR)
+					playSound(root, SOUNDS.Impact, 2, 0.7)
+					hurt(within(to, Proto.DiveR, 7), 30, to, "Knockdown")
+					hold(0.5)
+				end
+			end
+			task.delay(Proto.EnterTime, function() -- (the slam as it lands)
+				if not self.dead then
+					Core.shockwave(home, Proto.EnterR + 2)
+					playSound(root, SOUNDS.Impact, 3, 0.5)
+					hurt(within(home, Proto.EnterR, 8), 28, home, "Knockdown")
+				end
+			end)
+			-- its mind: settle after coming down, then every couple of seconds an attack - and never long near its brother. A
+			-- pillar's only ever for one attack, and never two running: up, the attack, and straight back down in a swoop
+			task.spawn(function()
+				if not hold(Proto.EnterTime + 1.2) then
+					return
+				end
+				local wasUp = false
+				while live() do
+					local list = onIt()
+					if #list == 0 then
+						hold(0.3)
+						continue
+					end
+					local tp = list[math.random(#list)][2].Position
+					local me, b = pos(), brother()
+					if b and flatDist(me, b) < 42 then
+						flyTo(spot(tp))
+						continue
+					end
+					local r, gap = math.random(), flatDist(me, tp)
+					local up = not wasUp and r < (b and 0.45 or 0.32) -- (with its brother: more often up out of reach, raining fire)
+					wasUp = up
+					if up and r < 0.18 then
+						volley()
+						flyTo(spot(tp), 3, 55) -- (the swoop down)
+					elseif up then
+						sunfall(tp)
+						flyTo(spot(tp), 3, 55)
+					elseif r < 0.7 and gap < Proto.GaleRange - 4 then
+						gale(tp)
+					elseif b and math.random() < 0.6 then -- (with its brother, it doesn't chase you down: it keeps its range)
+						flyTo(spot(tp), 6, 30)
+					else
+						dive(tp)
+					end
+					hold(1.4 + math.random())
+				end
+			end)
+			function self.destroy()
+				self.dead = true
+				follow:Disconnect()
+				tm:Destroy()
+				px:Destroy()
+				ReplicatedStorage:SetAttribute("Boss2Active", false)
+			end
+			function self.heal() -- (everyone fighting it fell, its brother already slain: whole again, back down on its spot)
+				hum.Health = Proto.TrueHP
+				tm:SetAttribute("Perched", false)
+				setMove(pos(), spot(nil), 8, 1.5, nil)
+			end
+			-- slain: its bar down, a burst of fire, and the victory if its brother's gone too
+			hum.Died:Connect(function()
+				self.dead = true
+				follow:Disconnect()
+				local at = root.Position
+				Core.shockwave(Vector3.new(at.X, FY, at.Z), 12)
+				Core.burst(at, Color3.fromRGB(255, 150, 60), 40, 0.6, 30)
+				ReplicatedStorage:SetAttribute("Boss2Active", false)
+				felled(at)
+				tm:Destroy()
+				task.delay(1, function()
+					px:Destroy()
+				end)
+			end)
+			-- its bar, and (once its brother's gone) its own reset when everyone fighting it falls
+			task.spawn(function()
+				local shown2, fought = false, {}
+				while not self.dead do
+					task.wait(0.2)
+					local list = onIt()
+					for _, e in ipairs(list) do
+						fought[e[1]] = e[2].Parent
+					end
+					if #list == 0 and not brother() then
+						for pl, char in pairs(fought) do
+							if pl.Parent and aliveChar(pl) ~= char and live() then
+								fought = {}
+								self.heal()
+								break
+							end
+						end
+					end
+					local want = live() and #list > 0
+					if want ~= shown2 then
+						shown2 = want
+						if want then
+							ReplicatedStorage:SetAttribute("Boss2Name", Proto.TrueName)
+							ReplicatedStorage:SetAttribute("Boss2MaxHP", Proto.TrueHP)
+						end
+						ReplicatedStorage:SetAttribute("Boss2Active", want)
+					end
+					if shown2 then
+						ReplicatedStorage:SetAttribute("Boss2HP", math.max(0, hum.Health))
+					end
+				end
+			end)
+			return self
+		end
+		task.spawn(function()
+			while model.Parent do
+				task.wait(0.2)
+				local inside = {}
+				for _, pl in ipairs(Players:GetPlayers()) do
+					local char, _, hrp = aliveChar(pl)
+					if char and states[pl] and onIsland(hrp.Position) then
+						inside[pl] = hrp
+					end
+				end
+				local first = next(inside)
+				if first and not model:GetAttribute("EmergeAt") then
+					local base = model:GetAttribute("Base")
+					local shots = Proto.shots(base)
+					local total = Proto.Total
+					model:SetAttribute("EmergeAt", workspace:GetServerTimeNow())
+					for pl, hrp in pairs(inside) do
+						local st = states[pl]
+						Core.setAction(st, now(), total, total, total)
+						st.iStart, st.iEnd = now(), now() + total + 0.5
+						st.healing = false
+						Core.cancelSwing(st)
+						hrp.AssemblyLinearVelocity = Vector3.zero
+						hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(base.X, hrp.Position.Y, base.Z)) -- (facing where it'll come)
+						hrp.Anchored = true
+						FxRemote:FireClient(pl, "Grabbed", total)
+						FxRemote:FireClient(pl, "Cutscene", shots)
+					end
+					task.wait(total)
+					for pl, hrp in pairs(inside) do
+						if hrp.Parent then
+							hrp.Anchored = false
+							pcall(function()
+								hrp:SetNetworkOwner(pl)
+							end)
+						end
+					end
+				end
+				local emerged = model:GetAttribute("EmergeAt")
+				local out = emerged and workspace:GetServerTimeNow() - emerged > Proto.Total
+				-- once it's out: a stand-in for it among the enemies, to lock onto and to hit (its Humanoid holds its health),
+				-- kept on its chest - where it stands, or wherever it is in a leap
+				if out and not proxy then
+					proxy = Instance.new("Model")
+					proxy.Name = Proto.Name
+					proxy:SetAttribute("Boss", true)
+					proxy:SetAttribute("Radius", 7) -- (it's broad: blows land on its bulk)
+					proxy:SetAttribute("NoPush", true) -- (its Hit block is what you bump into: walk right up to its forelegs)
+					local root = Instance.new("Part")
+					root.Name = "HumanoidRootPart"
+					root.Size = TARGET_SIZE
+					root.Anchored, root.CanCollide, root.CanTouch, root.Transparency = true, false, false, 1 -- (CanQuery left on: some blows find their mark by raycast)
+					root.CFrame = CFrame.new((model:GetAttribute("LeapTo") or model:GetAttribute("Base").Position) + TARGET_OFF)
+					root.Parent = proxy
+					local hum = Instance.new("Humanoid")
+					hum.MaxHealth, hum.Health = Proto.HP, Proto.HP
+					hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+					hum.Parent = proxy
+					proxy.PrimaryPart = root
+					proxy.Parent = Core.EnemiesFolder
+					local follow = game:GetService("RunService").Heartbeat:Connect(function()
+						local leapAt = model:GetAttribute("LeapAt")
+						local u = leapAt and workspace:GetServerTimeNow() - leapAt
+						if u and u >= 0 and u < Proto.LeapTime then
+							root.CFrame = CFrame.new((Proto.leap(u, model:GetAttribute("LeapFrom"), model:GetAttribute("LeapTo"), 0) * CFrame.new(0, 10.8, -6)).Position)
+						else
+							root.CFrame = CFrame.new((model:GetAttribute("LeapTo") or model:GetAttribute("Base").Position) + TARGET_OFF)
+						end
+					end)
+					-- slain: the bar down, and it gone in a burst of fire and ash
+					hum.Died:Connect(function()
+						follow:Disconnect()
+						malDead = true
+						local at = root.Position
+						Core.shockwave(at - Vector3.new(0, 9, 0), 14)
+						Core.burst(at, Color3.fromRGB(255, 120, 40), 40, 0.6, 30)
+						if shown then
+							shown = false
+							ReplicatedStorage:SetAttribute("BossActive", false)
+						end
+						felled(at)
+						model:Destroy() -- (the loop ends with it; its brother, in the same folder, fights on)
+						task.delay(1, function()
+							proxy:Destroy()
+						end)
+					end)
+				end
+				local alive = proxy and proxy.Parent and proxy.Humanoid.Health > 0
+				if alive and not T and proxy.Humanoid.Health <= Proto.HP * 0.6 then -- (60%: its brother comes down)
+					T = spawnTrue()
+				end
+				-- its attacks, every few seconds, at someone on the island: the twisting leap, landing on them, or the helix of fire
+				if first and out and alive and now() >= nextLeap then
+					local list = {}
+					for _, hrp in pairs(inside) do
+						table.insert(list, hrp)
+					end
+					local target = list[math.random(#list)].Position
+					local hit = model:FindFirstChild("Hit")
+					local from = model:GetAttribute("LeapTo") or model:GetAttribute("Base").Position
+					-- the leap only closes a gap: never at someone already near it; far off, it's the likeliest
+					local gap = Vector3.new(target.X - from.X, 0, target.Z - from.Z).Magnitude
+					-- (once its brother's down with it: it mostly answers distance with fire, but still closes the gap every 3-4 attacks)
+					local duo = T and not T.dead and T.model and T.model.Parent ~= nil
+					local pick
+					if duo then
+						sinceLeap += 1
+						pick = gap >= Proto.LeapMin and (sinceLeap >= leapEvery and 4 or math.random(2, 3)) or math.random(3)
+						if pick == 4 then
+							sinceLeap, leapEvery = 0, math.random(3, 4)
+						end
+					else
+						pick = gap >= Proto.LeapMin and (math.random() < 0.5 and 4 or math.random(2, 3)) or math.random(3)
+					end
+					if pick == 1 then -- the tail slash: wound up, then the whole of it spun round, the tail sweeping a circle
+						local d = target - from
+						local yaw0 = math.atan2(-d.X, -d.Z)
+						local t0 = workspace:GetServerTimeNow()
+						model:SetAttribute("SwipeYaw", yaw0)
+						model:SetAttribute("SwipeAt", t0)
+						playSound(hit, SOUNDS.Groan, 2, 0.5)
+						task.delay(Proto.SwipeWind, function()
+							playSound(hit, SOUNDS.WatchdogBlast, 3, 1)
+						end)
+						nextLeap = now() + Proto.SwipeTime + 2 + math.random() * 1.6
+						task.spawn(function() -- struck as the tail passes over you (a beat behind the chest: it drags), once each
+							local struck, prev = {}, nil
+							while model.Parent do
+								local u = workspace:GetServerTimeNow() - t0
+								if u > Proto.SwipeTime then
+									break
+								end
+								local tail = Proto.swipeYaw(yaw0, u - 0.08) + math.pi -- (its tail points behind it)
+								if prev and tail > prev and u > Proto.SwipeWind then
+									for _, pl in ipairs(Players:GetPlayers()) do
+										local char, _, phrp = aliveChar(pl)
+										local rel = char and phrp.Position - from
+										local r = rel and Vector3.new(rel.X, 0, rel.Z).Magnitude
+										if r and not struck[pl] and r > 4 and r < Proto.SwipeReach and math.abs(rel.Y) < 8 then
+											local ang = math.atan2(-rel.X, -rel.Z)
+											if (ang - prev) % (2 * math.pi) <= tail - prev then
+												struck[pl] = true
+												Core.damagePlayer(pl, 32, phrp.Position - rel.Unit, "Knockdown")
+											end
+										end
+									end
+								end
+								prev = tail
+								task.wait(0.03)
+							end
+						end)
+						continue
+					elseif pick == 2 then
+						local d = target - from
+						local aim = math.atan2(-d.X, -d.Z)
+						local side = math.random() < 0.5 and -1 or 1 -- (which way its head drags across as it spews)
+						model:SetAttribute("BreathYaw0", aim - side * 0.2 + math.random() * 1e-3) -- (the jitter: each flood's own scatter)
+						model:SetAttribute("BreathYaw1", aim + side * 0.2)
+						local t0 = workspace:GetServerTimeNow()
+						model:SetAttribute("BreathAt", t0)
+						playSound(hit, SOUNDS.Groan, 2, 0.45)
+						task.delay(Proto.BreathWind, function()
+							playSound(hit, SOUNDS.FireCast, 3, 0.45)
+						end)
+						nextLeap = now() + Proto.BreathWind + Proto.BreathTime + 2.4 + math.random() * 1.6
+						task.spawn(function() -- the front hits hard as it rolls over you; the ground it leaves burns
+							local B, burnt = Proto.breathOf(model), {}
+							while model.Parent do
+								local u = workspace:GetServerTimeNow() - t0
+								if u > Proto.BreathEnd then
+									break
+								end
+								for _, pl in ipairs(Players:GetPlayers()) do
+									local char, _, phrp = aliveChar(pl)
+									local what = char and Proto.fireAt(B, phrp.Position, u)
+									if what == "front" and (not burnt[pl] or now() - burnt[pl] > 0.8) then
+										burnt[pl] = now()
+										Core.damagePlayer(pl, 26, B.origin, "Large")
+									elseif what == "burn" and (not burnt[pl] or now() - burnt[pl] > 0.5) then
+										burnt[pl] = now()
+										Core.damagePlayer(pl, 7, phrp.Position, "Small")
+									end
+								end
+								task.wait(0.05)
+							end
+						end)
+						continue
+					elseif pick == 3 then -- the rearing slam: up on its tail, a beat, then flung down - the slam, and a wedge of rubble ahead
+						local d = target - from
+						model:SetAttribute("SlamYaw", math.atan2(-d.X, -d.Z) + math.random() * 1e-4) -- (the jitter: each wedge its own)
+						local t0 = workspace:GetServerTimeNow()
+						model:SetAttribute("SlamAt", t0)
+						playSound(hit, SOUNDS.Groan, 2, 0.5)
+						nextLeap = now() + Proto.SlamTime + 2 + math.random() * 1.6
+						task.spawn(function()
+							local S, struck, landed = Proto.slamOf(model), {}, false
+							while model.Parent do
+								local u = workspace:GetServerTimeNow() - t0
+								if u > Proto.SlamEnd then
+									break
+								end
+								if not landed and u >= Proto.SlamLand then
+									landed = true
+									Core.shockwave(S.at + S.fwd * Proto.SlamAhead, 12)
+									playSound(hit, SOUNDS.WatchdogSmash, 2.5, 1)
+								end
+								for _, pl in ipairs(Players:GetPlayers()) do
+									local char, _, phrp = aliveChar(pl)
+									local what = char and Proto.slamHit(S, phrp.Position, u)
+									if what and not struck[pl] then -- (once each: the slam or the rubble, whichever finds you first)
+										struck[pl] = true
+										if what == "slam" then
+											Core.damagePlayer(pl, 36, S.at, "Knockdown")
+										else
+											Core.damagePlayer(pl, 24, phrp.Position - S.fwd, "Large")
+										end
+									end
+								end
+								task.wait(0.03)
+							end
+						end)
+						continue
+					end
+					local to = Vector3.new(math.clamp(target.X, Ar.MinX + 10, Ar.MaxX - 10), Ar.Centre.Y, math.clamp(target.Z, Ar.MinZ + 10, Ar.MaxZ - 10))
+					-- (as far as you, but never a short hop nor further than it can spring; still on the island)
+					local dist = (to - from).Magnitude
+					local dir = dist > 0.1 and (to - from).Unit or Vector3.new(0, 0, -1)
+					to = from + dir * math.clamp(dist, Proto.LeapMin, Proto.LeapMax)
+					if duo then -- (never landing on top of its brother: pushed out to 26 from him)
+						local tp = Proto.trueAt(T.model, workspace:GetServerTimeNow())
+						local off = tp and Vector3.new(to.X - tp.X, 0, to.Z - tp.Z)
+						if off and off.Magnitude < 26 then
+							to += (off.Magnitude > 0.1 and off.Unit or -dir) * (26 - off.Magnitude)
+						end
+					end
+					to = Vector3.new(math.clamp(to.X, Ar.MinX + 10, Ar.MaxX - 10), to.Y, math.clamp(to.Z, Ar.MinZ + 10, Ar.MaxZ - 10))
+					model:SetAttribute("LeapFrom", from)
+					model:SetAttribute("LeapTo", to)
+					model:SetAttribute("LeapAt", workspace:GetServerTimeNow())
+					local hit = model:FindFirstChild("Hit")
+					playSound(hit, SOUNDS.Groan, 2, 0.55)
+					nextLeap = now() + Proto.LeapTime + 2 + math.random() * 1.6
+					task.delay(Proto.LeapLand, function()
+						Core.shockwave(to, 12)
+						playSound(hit, SOUNDS.WatchdogSmash, 2.5, 1)
+						for _, pl in ipairs(Core.playersInRadius(to, 12, 10)) do
+							Core.damagePlayer(pl, 30, to, "Knockdown")
+						end
+						if hit then -- (its still block, where it now stands)
+							hit.CFrame += to - from
+						end
+					end)
+				end
+				-- everyone who fought it dead and nobody left on the island: it's whole again, back on its spot (its entrance
+				-- isn't played again: it's already out)
+				for pl, hrp in pairs(inside) do
+					fighters[pl] = hrp.Parent
+				end
+				if alive and not first then
+					local wiped = false
+					for pl, char in pairs(fighters) do
+						if pl.Parent and aliveChar(pl) ~= char then
+							wiped = true
+						end
+					end
+					if wiped then
+						fighters = {}
+						if T then
+							T.destroy()
+							T = nil
+						end
+						proxy.Humanoid.Health = Proto.HP
+						local hit, from = model:FindFirstChild("Hit"), model:GetAttribute("LeapTo")
+						if hit and from then
+							hit.CFrame += model:GetAttribute("Base").Position - from
+						end
+						for _, a in ipairs({ "LeapTo", "LeapFrom", "LeapAt", "SwipeAt", "BreathAt", "SlamAt" }) do
+							model:SetAttribute(a, nil)
+						end
+					end
+				end
+				-- its bar: only ever switched on and off by this (so another boss's are left alone)
+				local want = alive and first ~= nil and model:GetAttribute("EmergeAt") ~= nil
+				if want ~= shown then
+					shown = want
+					if want then
+						ReplicatedStorage:SetAttribute("BossName", Proto.Name)
+						ReplicatedStorage:SetAttribute("BossMaxHP", Proto.HP)
+					end
+					ReplicatedStorage:SetAttribute("BossActive", want)
+				end
+				if shown then
+					ReplicatedStorage:SetAttribute("BossHP", alive and proxy.Humanoid.Health or Proto.HP)
+				end
+			end
+		end)
+	end)
+	if not ok then
+		warn("PyralisProto: " .. tostring(err))
+	end
+end
+
+-- THE GREAT LIFT (Map.Bulwark.Lift: PyralisBulwark), from the Watchdog's Run up to Pyralis Bulwark. Its lever sends it to
+-- the other end; the levers at each end call it there. Whoever's standing on its deck rides it, held still on it
+do
+	local Lf = Map.Bulwark and Map.Bulwark.Lift
+	if Lf then
+		local moving = false
+		local function go(to)
+			if moving or Lf.At == to then
+				return
+			end
+			moving = true
+			local from, dest = Lf[Lf.At], Lf[to]
+			local riders = {}
+			for _, pl in ipairs(Players:GetPlayers()) do
+				local char, _, hrp = aliveChar(pl)
+				local rel = char and from:PointToObjectSpace(hrp.Position)
+				if rel and math.abs(rel.X) < 11 and math.abs(rel.Z) < 11 and rel.Y > 0 and rel.Y < 8 then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					hrp.Anchored = true
+					table.insert(riders, { pl, hrp, from:ToObjectSpace(hrp.CFrame) })
+				end
+			end
+			local dur = (dest.Position - from.Position).Magnitude / 14 -- (14 studs a second: slow, as such lifts are)
+			for _, rd in ipairs(riders) do
+				FxRemote:FireClient(rd[1], "Grabbed", dur + 0.6)
+				local st = states[rd[1]]
+				if st then
+					Core.setAction(st, now(), dur + 0.6, dur + 0.6, dur + 0.6)
+				end
+			end
+			playSound(Lf.Deck, SOUNDS.Impact, 2.5, 0.4)
+			task.wait(0.6)
+			local t0 = os.clock()
+			while true do
+				local a = math.clamp((os.clock() - t0) / dur, 0, 1)
+				local cf = from:Lerp(dest, a * a * (3 - 2 * a))
+				for _, e in ipairs(Lf.Parts) do
+					e[1].CFrame = cf * e[2]
+				end
+				for _, rd in ipairs(riders) do
+					if rd[2].Parent then
+						rd[2].CFrame = cf * rd[3]
+					end
+				end
+				if a >= 1 then
+					break
+				end
+				RunService.Heartbeat:Wait()
+			end
+			Lf.At = to
+			playSound(Lf.Deck, SOUNDS.Impact, 2.5, 0.5)
+			for _, rd in ipairs(riders) do
+				if rd[2].Parent then
+					rd[2].Anchored = false
+					pcall(function()
+						rd[2]:SetNetworkOwner(rd[1])
+					end)
+				end
+			end
+			moving = false
+		end
+		Lf.Prompt.Triggered:Connect(function()
+			task.spawn(go, Lf.At == "Bottom" and "Top" or "Bottom")
+		end)
+		Lf.CallBottom.Triggered:Connect(function()
+			task.spawn(go, "Bottom")
+		end)
+		Lf.CallTop.Triggered:Connect(function()
+			task.spawn(go, "Top")
+		end)
+	end
+end
+
+-- falls that kill: the chasm beyond the township, the Maw of Pyralis's lava
+local DEADLY = {}
+if Map.Chasm then
+	table.insert(DEADLY, Map.Chasm)
+end
+for _, m in ipairs(Map.Underfire and Map.Underfire.Moats or {}) do
+	table.insert(DEADLY, m)
+end
+
+local function underfireDescent(player, st, char, hrp, quick)
+	local D = Map.Underfire
+	st.underfireAt = now()
+	local V, look = Vector3.new, CFrame.lookAt
+	local function alive()
+		return hrp.Parent and player.Character == char
+	end
+	if quick then
+		FxRemote:FireClient(player, "Flash", Color3.new(0, 0, 0), 1.2, 0.4)
+		task.delay(0.2, function()
+			if alive() then
+				char:PivotTo(D.Landing)
+				hrp.AssemblyLinearVelocity = V()
+			end
+		end)
+		return
+	end
+	st.underfireSeen = true
+	local P0, L = hrp.Position, D.Landing.Position
+	local y0 = P0.Y
+	-- {time, position}: out to the lip, a pause, a step back, a pause, the run-up; the leap is at JUMP
+	local JUMP, LAND = 4.1, 5.7
+	local keys = { { 0, P0 }, { 1.4, V(90.3, y0, -32) }, { 2.6, V(90.3, y0, -32) }, { 3.1, V(89.5, y0, -32) }, { 3.7, V(89.5, y0, -32) }, { JUMP, V(91.3, y0, -32) } }
+	local shots = {
+		{ look(V(77, 5.5, -32), V(92, 3, -32)), look(V(81, 5, -32), V(94, 2, -32)), 2.6 }, -- behind him down the hallway (4 wide: dead centre), the glow ahead
+		{ look(V(100, -8, -38), V(91, 3, -32)), look(V(98, -5, -36), V(91, 4, -32)), 1.5 }, -- from the pit, up at him
+		{ look(V(96, 6, -44), V(98, 0, -32)), look(V(112, -6, -44), V(108, -22, -32)), 1.6 }, -- the leap
+		{ look(V(146, -108, 8), V(128, -88, -5)), look(V(150, -105, 6), V(130, -94, -5)), 3.0 }, -- the broken ceiling
+		{ look(V(136.5, -103.5, -1.5), V(158, -99, -5)), look(V(138.5, -103.8, -3), V(172, -98, -5)), 3.4 }, -- past his shoulder
+		{ look(V(166, -101, 12), V(140, -106, -5)), look(V(166, -101, -20), V(140, -106, -5)), 3.4 }, -- round the room, back to him
+	}
+	local total = 0
+	for _, shot in ipairs(shots) do
+		total += shot[3]
+	end
+	st.underfireAt = now() + total -- (falling past the pit's mouth in it doesn't start the quick drop)
+	Core.setAction(st, now(), total, total, total)
+	st.iStart, st.iEnd = now(), now() + total + 0.5 -- (nothing hurts you through it)
+	st.healing = false
+	Core.cancelSwing(st)
+	hrp.Anchored = true
+	FxRemote:FireClient(player, "Grabbed", total)
+	FxRemote:FireClient(player, "Cutscene", shots)
+	-- his body: eyes on the pit, a flinch back, gathering himself, the tucked leap, a crouched landing, then up
+	local function bp(name, blend)
+		char:SetAttribute("BP", name)
+		char:SetAttribute("BPT", blend)
+		char:SetAttribute("BPN", (char:GetAttribute("BPN") or 0) + 1)
+	end
+	for _, e in ipairs({ { 1.4, "Read", 0.4 }, { 2.6, "Flinch", 0.2 }, { 3.1, "Read", 0.3 }, { 3.7, "Crouch", 0.35 }, { JUMP, "Air", 0.12 }, { LAND, "Kneel", 0.05 }, { LAND + 2.2, "Idle", 0.9 } }) do
+		task.delay(e[1], function()
+			if alive() then
+				bp(e[2], e[3])
+			end
+		end)
+	end
+	task.delay(LAND - 0.35, function() -- (he drops into the dark)
+		FxRemote:FireClient(player, "Flash", Color3.new(0, 0, 0), 1.4, 0.8)
+	end)
+	task.spawn(function()
+		local t0, prev, last = os.clock(), P0, os.clock()
+		while alive() do
+			local t = os.clock() - t0
+			if t >= total then
+				break
+			end
+			local p, yaw = nil, 0 -- (yaw 0 faces +x)
+			if t < JUMP then
+				for i = 2, #keys do
+					if t <= keys[i][1] then
+						local a, b = keys[i - 1], keys[i]
+						local k = math.clamp((t - a[1]) / (b[1] - a[1]), 0, 1)
+						p = a[2]:Lerp(b[2], k * k * (3 - 2 * k))
+						break
+					end
+				end
+			elseif t < LAND then
+				local d = t - JUMP -- (a ballistic leap: 22 up, gravity 60, 1.3 s to the pit's lip)
+				p = V(91.3 + math.min(12.85 * d, D.Pit.X - 91.3), y0 + 22 * d - 30 * d * d, -32)
+			else
+				p = L
+				local k = math.clamp((total - t) / 2, 0, 1) -- (looks about, then settles facing the hall)
+				yaw = 0.55 * math.sin((t - LAND) * 1.1) * k
+			end
+			char:PivotTo(CFrame.lookAt(p, p + V(math.cos(yaw), 0, math.sin(yaw))))
+			local now2 = os.clock()
+			hrp.AssemblyLinearVelocity = t < LAND and (p - prev) / math.max(now2 - last, 1 / 60) or V() -- (the walk cycle reads it)
+			prev, last = p, now2
+			RunService.Heartbeat:Wait()
+		end
+		if alive() then
+			bp("Idle", 0.3)
+			char:PivotTo(D.Landing)
+			hrp.Anchored = false
+			pcall(function()
+				hrp:SetNetworkOwner(player)
+			end)
+		end
+	end)
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	local t = now()
 	for player, st in pairs(states) do
@@ -1583,15 +2533,52 @@ RunService.Heartbeat:Connect(function(dt)
 			-- the area name shows every time you walk into a different area
 			-- (a short per-area cooldown stops it flickering if you hover on a border)
 			-- fell off the crossing beyond the township: the chasm takes you
-			local ch = Map.Chasm
+			-- (and the sunk lava of the Maw of Pyralis, beneath the Fallen Cellblock: DEADLY)
 			local pos = hrp.Position
-			if ch and pos.Y < ch.MaxY and pos.X > ch.MinX and pos.X < ch.MaxX and pos.Z > ch.MinZ and pos.Z < ch.MaxZ then
-				local _, hum = aliveChar(player)
-				if hum then
-					hum.Health = 0
+			for _, ch in ipairs(DEADLY) do
+				if pos.Y < ch.MaxY and pos.X > ch.MinX and pos.X < ch.MaxX and pos.Z > ch.MinZ and pos.Z < ch.MaxZ then
+					local _, hum = aliveChar(player)
+					if hum then
+						hum.Health = 0
+					end
+				end
+			end
+			-- (and the fall off Pyralis Bulwark's spires, bridges and halls: below 70 over any of it you're dead - not in
+			-- the lift's shaft, though, unless you're falling down it rather than riding)
+			local Bw = Map.Bulwark
+			if Bw and pos.Y < Bw.FallY and pos.Y > -40 then
+				local sh = Bw.Shaft
+				local inShaft = pos.X > sh[1] and pos.X < sh[3] and pos.Z > sh[2] and pos.Z < sh[4]
+				if not inShaft or (not hrp.Anchored and hrp.AssemblyLinearVelocity.Y < -60) then
+					for _, q in ipairs(Bw.Falls) do
+						if pos.X > q[1] and pos.X < q[3] and pos.Z > q[2] and pos.Z < q[4] then
+							local _, hum = aliveChar(player)
+							if hum then
+								hum.Health = 0
+							end
+							break
+						end
+					end
 				end
 			end
 			local zone = zoneAt(hrp.Position)
+			local D = Map.Underfire
+			if D and t - (st.underfireAt or -100) > 4 then
+				local g = D.Gate
+				if not st.underfireSeen and pos.X >= g.MinX and pos.X <= g.MaxX and pos.Z >= g.MinZ and pos.Z <= g.MaxZ and pos.Y > -5 then
+					task.spawn(underfireDescent, player, st, char, hrp)
+				elseif pos.Y < D.Pit.Y + 1 and (pos.X - D.Pit.X) ^ 2 + (pos.Z - D.Pit.Z) ^ 2 < 25 then
+					task.spawn(underfireDescent, player, st, char, hrp, true) -- (into the pit's mouth, any time after)
+				end
+			end
+			local beneath = st.zone == "Maw of Pyralis"
+			if player:GetAttribute("Beneath") ~= beneath then
+				player:SetAttribute("Beneath", beneath) -- (the client darkens the air)
+			end
+			local smoulder = st.zone == "Pyralis Bulwark"
+			if player:GetAttribute("Smoulder") ~= smoulder then
+				player:SetAttribute("Smoulder", smoulder) -- (the client dims it a little, smoky and red)
+			end
 			if zone and zone ~= st.zone then
 				st.zone = zone
 				if t - (st.seenZones[zone] or -100) > 8 then

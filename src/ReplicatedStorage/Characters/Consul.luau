@@ -1214,6 +1214,7 @@ local function onDied(b)
 	if boss.gen ~= b.gen or boss.state == "dead" then
 		return
 	end
+	local victors = playersInAttic() -- (before the seal lifts: whoever fought him up here)
 	boss.state = "dead"
 	boss.purple = false
 	ReplicatedStorage:SetAttribute("BossActive", false)
@@ -1224,6 +1225,15 @@ local function onDied(b)
 	snuff(false)
 	Core.dropSplinter(b.root.Position, b.model)
 	restoreDay(45) -- the night lifts, slowly
+	-- his drop: the Dark Book, to everyone who fought him (once the banner and his last words have had a moment)
+	task.delay(4, function()
+		for _, pl in ipairs(victors) do
+			if pl.Parent and not pl:GetAttribute("Has_DarkBook") then
+				pl:SetAttribute("Has_DarkBook", true)
+				FxRemote:FireClient(pl, "Message", "Dark Book. Aldous's own. Its pages are slick, and warm, and the words crawl. Press T to choose weapons and armor.")
+			end
+		end
+	end)
 	-- a while after he's gone (his last words, the victory banner, the music have had their time): his hold on
 	-- the bonfires ends, and rest at one lets you be carried to any other you've lit (init.server's "Travel")
 	task.delay(11, function()

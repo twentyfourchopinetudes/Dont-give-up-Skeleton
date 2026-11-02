@@ -297,7 +297,7 @@ local function hold(e, player)
 		playerPose(char, i % 2 == 0 and "Stagger" or "Flinch", 0.1)
 		hrp.CFrame = up * CFrame.new(math.random(-10, 10) / 40, math.random(-10, 10) / 40, 0)
 		playSound(root, SOUNDS.Impact, 0.8, 0.3 + i * 0.05)
-		burst(up.Position, Color3.fromRGB(110, 14, 16), 12, 0.3, 8)
+		burst(up.Position, Color3.fromRGB(46, 66, 34), 12, 0.3, 8) -- (rot, dark green: no blood)
 		damagePlayer(player, G.SqueezeDamage, root.Position, "Small")
 		-- (a hit's stun would free your inputs early: pin them again)
 		local left = (G.Squeezes - i) * G.SqueezeTime + 0.3

@@ -1262,7 +1262,6 @@ function MapBuilder.build()
 	-----------------------------------------------------------------------
 	message(Vector3.new(-2, 0, 9), "Space to roll. A roll is a moment of invincibility. Roll through the blow, not away from it.")
 	message(Vector3.new(2, 0, 38), "Q to lock on. Hold Shift to run. Mind your stamina.")
-	message(Vector3.new(5, 0, 54), "Rest at the bonfire. Your flasks refill... and so do they.")
 	message(Vector3.new(24, 0, 90), "Darkness ahead. Ambush ahead.")
 	message(Vector3.new(63, -6, 46), "Many hollows ahead. Be wary of being surrounded.")
 	message(Vector3.new(0, 0, 205), "Be patient. Strike only after the slam.")
@@ -4261,7 +4260,7 @@ function MapBuilder.build()
 				-- (none where the encampment, its crossing and the far side, or the Weald and its
 				-- colosseum now stand: they'd show through them, visible but not solid)
 				local c = cf.Position
-				for _, q in ipairs({ { 150, 420, 300, 690 }, { -201, 429, 113, 611 }, { -340, -240, -60, 245 } }) do
+				for _, q in ipairs({ { 150, 420, 300, 690 }, { -201, 429, 113, 611 }, { -340, -240, -60, 245 }, { 140, -70, 330, 215 }, { 290, 140, 650, 520 } }) do -- (the last two: Pyralis Bulwark and its branch west)
 					local dx = c.X - math.clamp(c.X, q[1], q[3])
 					local dz = c.Z - math.clamp(c.Z, q[2], q[4])
 					if math.sqrt(dx * dx + dz * dz) < math.max(size.X, size.Y, size.Z) * 0.75 then
@@ -5328,7 +5327,7 @@ function MapBuilder.build()
 				B(-190.4, G0, z - 3.2, -188.2, G0 + 1.8, z + 3.2, "Coffin", Color3.fromRGB(34, 24, 20), MAT.Wood)
 				B(-190.2, G0 + 1.8, z - 3, -188.4, G0 + 2.1, z + 3, "CoffinLid", Color3.fromRGB(44, 32, 26), MAT.Wood, false)
 			end
-			-- blood, dried black on the stone
+			-- the rot's ichor, dried dark green on the stone (no blood in the house: a colour blood never is)
 			local POOLS = {
 				{ -241, -34, -189, -14, G0 }, { -241, -101, -189, -35, G0 }, { -241, -145, -189, -103, G0 }, { -265, -81, -243, -15, G0 },
 				{ -265, -145, -243, -84, G0 }, { -187, -91, -165, -15, G0 }, { -187, -145, -165, -94, G0 },
@@ -5337,7 +5336,7 @@ function MapBuilder.build()
 			for _ = 1, 34 do
 				local r = POOLS[rng:NextInteger(1, #POOLS)]
 				local x, z, rad = rng:NextNumber(r[1] + 3, r[3] - 3), rng:NextNumber(r[2] + 3, r[4] - 3), rng:NextNumber(0.8, 2.6)
-				part({ Name = "Blood", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.06, rad * 2, rad * 2 * rng:NextNumber(0.6, 1)), CFrame = CFrame.new(x, MY + r[5] + 0.07, z) * CFrame.Angles(0, rng:NextNumber(0, 6), math.pi / 2), Material = MAT.SmoothPlastic, Color = Color3.fromRGB(70, 8, 10):Lerp(Color3.fromRGB(26, 6, 6), rng:NextNumber()), Reflectance = 0.15, CanCollide = false })
+				part({ Name = "Ichor", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.06, rad * 2, rad * 2 * rng:NextNumber(0.6, 1)), CFrame = CFrame.new(x, MY + r[5] + 0.07, z) * CFrame.Angles(0, rng:NextNumber(0, 6), math.pi / 2), Material = MAT.SmoothPlastic, Color = Color3.fromRGB(38, 56, 30):Lerp(Color3.fromRGB(16, 24, 12), rng:NextNumber()), Reflectance = 0.15, CanCollide = false })
 			end
 			Detail.ritualCircle(at3(-215, G0, -66), 9) -- in the nave, where its bonfire burned
 			local function fogBank(x1, z1, x2, z2, y, h, rate)
@@ -5539,97 +5538,8 @@ function MapBuilder.build()
 				fogBank(cx - 44, cz - 60, cx + 44, cz + 52, AF + 3, 5, 24) -- low fog across the arena floor
 			end
 
-			-- the plan, pinned up on the foyer wall: both floors, every door, the stairs and the ladder
-			do
-				local ROOMS = {
-					{ 1, "FOYER", -241, -34, -189, -14 }, { 1, "NAVE", -241, -102, -189, -34 }, { 1, "REAR HALL", -241, -146, -189, -102 },
-					{ 1, "LIBRARY", -266, -82, -242, -14 }, { 1, "SERVANTS' HALL", -266, -146, -242, -82 },
-					{ 1, "DINING HALL", -188, -92, -164, -14 }, { 1, "KITCHENS", -188, -146, -164, -92 },
-					{ 2, "LANDING", -241, -34, -189, -14 }, { 2, "NAVE GALLERY", -241, -102, -189, -34 }, { 2, "REAR GALLERY", -241, -146, -189, -102 },
-					{ 2, "READING GALLERY", -266, -82, -242, -14 }, { 2, "DORMITORY", -266, -146, -242, -82 },
-					{ 2, "BANQUET GALLERY", -188, -92, -164, -14 }, { 2, "UPPER KITCHENS", -188, -146, -164, -92 },
-				}
-				local board = part({ Name = "MansionPlan", Size = Vector3.new(19, 11, 0.4), CFrame = CFrame.new(-231.5, MY + 11.5, -33.2), Material = MAT.WoodPlanks, Color = IN_WOOD })
-				local gui = Instance.new("SurfaceGui")
-				gui.Face, gui.SizingMode, gui.CanvasSize, gui.LightInfluence = Enum.NormalId.Back, Enum.SurfaceGuiSizingMode.FixedSize, Vector2.new(1520, 880), 0
-				gui.Parent = board
-				local paper = Instance.new("Frame")
-				paper.Size, paper.BackgroundColor3, paper.BorderSizePixel = UDim2.fromScale(1, 1), Color3.fromRGB(30, 26, 22), 0
-				paper.Parent = gui
-				local TXT = Color3.fromRGB(214, 204, 176)
-				local function box2(x, y, w, h, color, text, size)
-					local f = Instance.new("Frame")
-					f.Position, f.Size, f.BackgroundColor3, f.BorderSizePixel = UDim2.fromOffset(x, y), UDim2.fromOffset(w, h), color, 0
-					if text then
-						local t = Instance.new("TextLabel")
-						t.Size, t.BackgroundTransparency, t.Text, t.TextSize, t.TextColor3 = UDim2.fromScale(1, 1), 1, text, size or 18, TXT
-						t.Font, t.TextWrapped = Enum.Font.Fantasy, true
-						t.Parent = f
-					end
-					f.Parent = paper
-					return f
-				end
-				local function label(x, y, text, size, color)
-					local t = Instance.new("TextLabel")
-					t.AnchorPoint, t.Position, t.Size, t.BackgroundTransparency = Vector2.new(0.5, 0.5), UDim2.fromOffset(x, y), UDim2.fromOffset(200, 24), 1
-					t.Text, t.TextSize, t.TextColor3, t.Font = text, size or 16, color or TXT, Enum.Font.Fantasy
-					t.Parent = paper
-				end
-				local S, X0, Y0 = 5.4, { 40, 631 }, 110
-				local function px(lvl, x, z)
-					return X0[lvl] + (x + 266) * S, Y0 + (z + 146) * S
-				end
-				local GOLD, RED, TEAL = Color3.fromRGB(220, 170, 60), Color3.fromRGB(200, 50, 40), Color3.fromRGB(70, 150, 140)
-				for lvl = 1, 2 do
-					label(X0[lvl] + 51 * S, 60, lvl == 1 and "GROUND FLOOR" or "UPPER FLOOR", 34)
-					for _, r in ipairs(ROOMS) do
-						if r[1] == lvl then
-							local x1, z1 = px(lvl, r[3], r[4])
-							local x2, z2 = px(lvl, r[5], r[6])
-							box2(x1, z1, x2 - x1 - 2, z2 - z1 - 2, Color3.fromRGB(62, 56, 48), r[2], 20)
-						end
-					end
-					for _, d in ipairs(PLAN_DOORS[lvl]) do
-						local x, z = px(lvl, d[1] and d[3] or d[2], d[1] and d[2] or d[3])
-						local w = d[4] * S
-						if d[1] then
-							box2(x - w / 2, z - 3, w, 6, d[5] and RED or GOLD)
-						else
-							box2(x - 3, z - w / 2, 6, w, d[5] and RED or GOLD)
-						end
-						if d[5] then
-							label(x, z - 12, "ONE-WAY", 14, RED)
-						end
-					end
-					for _, st in ipairs({ STAIR_W, STAIR_E }) do
-						local x1, z1 = px(lvl, st[1], -144)
-						local x2, z2 = px(lvl, st[2], -117.6)
-						box2(x1, z1, x2 - x1, z2 - z1, TEAL, "STAIR", 14)
-					end
-				end
-				local lx, lz = px(2, -193, LZ)
-				box2(lx - 5, lz, 10, LEN * S * 0.5, TEAL, nil)
-				label(lx, lz - 12, "LADDER", 14, TEAL)
-				local ex, ez = px(1, -215, -14)
-				box2(ex - 7 * S, ez, 14 * S, 6, GOLD)
-				label(ex, ez + 24, "ENTRANCE", 18, GOLD)
-				local gx, gz = px(1, -215, -24)
-				label(gx, gz + 16, "YOU ARE HERE", 14, Color3.fromRGB(240, 220, 120))
-				label(1380, 140, "GOLD: a door", 18, GOLD)
-				label(1380, 175, "RED: opens from one", 18, RED)
-				label(1380, 200, "side only", 18, RED)
-				label(1380, 235, "TEAL: stairs, ladder", 18, TEAL)
-				label(1380, 290, "The way on: library,", 18)
-				label(1380, 315, "servants' stair, dormitory,", 18)
-				label(1380, 340, "rear gallery, kitchens.", 18)
-				label(1380, 375, "Down: the nave.", 18)
-				label(1380, 400, "Along: the nave's gallery,", 18)
-				label(1380, 425, "the landing, and the stair", 18)
-				label(1380, 450, "to the ATTIC above.", 18)
-			end
-
 			-- FURNISHED, AND LEFT TO ROT: what the house was (sheeted chairs, portraits gone dark, wardrobes, hearths, hooded
-			-- statues, pews, cages over the nave, meat on the kitchens' hooks, the last meal still laid) and what the years did
+			-- statues, pews, cages over the nave, empty hooks in the kitchens, the last meal still laid) and what the years did
 			-- to it (paper peeling off the damp, bare brick, cracks, fallen plaster, a film of dust over everything, cobwebs,
 			-- dust and haze hanging in the air). Solid pieces stand against walls, clear of every door and stair.
 			do
@@ -5753,14 +5663,12 @@ function MapBuilder.build()
 						P(CFrame.new(at3(x + dr:NextNumber(-0.9, 0.9), y + 0.3, z + dr:NextNumber(-0.9, 0.9))) * CFrame.Angles(0, dr:NextNumber(0, 3), 0.1), "Bone", Vector3.new(1.5, 0.2, 0.2), BONE, MAT.SmoothPlastic)
 					end
 				end
-				local function carcass(x, z, topY, len) -- on a butcher's hook
+				local function carcass(x, z, topY, len) -- a butcher's hook on its chain, empty
 					local hookY = topY - len
 					P(CFrame.new(at3(x, (topY + hookY) / 2, z)), "HookChain", Vector3.new(0.2, len, 0.2), COL.Iron, MAT.Metal)
 					P(CFrame.new(at3(x, hookY - 0.4, z)), "Hook", Vector3.new(0.2, 0.9, 0.2), COL.Iron, MAT.Metal)
-					local body = CFrame.new(at3(x, hookY - 3.2, z)) * CFrame.Angles(0, dr:NextNumber(0, 3), dr:NextNumber(-0.08, 0.08))
-					P(body, "Carcass", Vector3.new(1.7, 4.4, 1.2), Color3.fromRGB(84, 30, 28):Lerp(SOOT, dr:NextNumber(0, 0.4)), MAT.SmoothPlastic).Reflectance = 0.1
-					for k = 0, 3 do
-						P(body * CFrame.new(0, 1.2 - k * 0.7, -0.62), "Rib", Vector3.new(1.5, 0.18, 0.08), BONE, MAT.SmoothPlastic)
+					for _ = 1, 3 do -- (the meat that hung here is gone; its draws stay, so the house's random stream doesn't shift)
+						dr:NextNumber()
 					end
 				end
 				local function wheelchair(cf)
@@ -5789,9 +5697,8 @@ function MapBuilder.build()
 							local gx = x + (x < mx and 0.9 or -0.9)
 							if dr:NextNumber() < 0.6 then
 								disc(CFrame.new(at3(gx, y + 0.45, z + 0.6)), "Goblet", 0.4, 0.9, Color3.fromRGB(96, 84, 60), MAT.Metal)
-							else -- knocked over, its wine long dried
+							else -- knocked over, long since dry (no spill: a dark red puddle reads as blood)
 								part({ Name = "Goblet", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.9, 0.4, 0.4), CFrame = CFrame.new(at3(gx, y + 0.25, z + 0.6)) * CFrame.Angles(0, dr:NextNumber(0, 3), 0), Material = MAT.Metal, Color = Color3.fromRGB(96, 84, 60), CanCollide = false })
-								P(CFrame.new(at3(gx, y + 0.07, z + 1.1)), "Wine", Vector3.new(0.9, 0.02, 1.2), Color3.fromRGB(56, 12, 16), MAT.SmoothPlastic)
 							end
 						end
 						if dr:NextNumber() < 0.5 then
@@ -5852,7 +5759,7 @@ function MapBuilder.build()
 				portrait(wallCF(-187, G0, -50, 1, 0), 7, 5, 6, -0.03)
 				portrait(wallCF(-187, G0, -75, 1, 0), 7, 4, 6, 0.08, true)
 				armchair(floorCF(-178, G0, -22.5, 0), true)
-				-- the kitchens: meat on the hooks, pots on the table
+				-- the kitchens: the hooks, empty, pots on the table
 				for _, z in ipairs({ -126, -121, -116 }) do
 					carcass(-184, z, FL - 2, dr:NextNumber(8, 10))
 				end
@@ -6056,6 +5963,355 @@ function MapBuilder.build()
 				for _, c in ipairs({ { -266, -146, 1, 1 }, { -164, -146, -1, 1 }, { -266, -14, 1, -1 }, { -164, -14, -1, -1 } }) do
 					cobweb(c[1], AF + 22, c[2], c[3], c[4])
 				end
+
+				-- DRESSED AS IT WAS, AND KEPT AS IT IS: the finish a great house had (dark panelling round every room under a
+				-- chair rail, a cornice under every ceiling) and what still lives in it - candles someone keeps lit, the
+				-- Consul's rot creeping up from the floors (worse upstairs, nearer him), and the things his household left:
+				-- eyes in a wardrobe, a mirror that shows someone behind you, dolls on the beds, a
+				-- cradle still rocking, jars in the kitchens, a wall of his pages about her, and her shrine on the landing.
+				-- Nothing here is solid but the shrine's table; doorways and stairs are cleared afterwards (mansionClear).
+				-- (a function of its own, not a do-block: this builder is near Luau's limit of locals in one function)
+				;(function()
+					local cr = Random.new(8804) -- (its own stream: nothing else shifts)
+					local function R(a, b)
+						return cr:NextNumber(a, b)
+					end
+					local PANEL, PANEL_LT, RAIL = Color3.fromRGB(36, 26, 20), Color3.fromRGB(50, 36, 27), Color3.fromRGB(60, 45, 32)
+					local ICHOR, INK = Color3.fromRGB(34, 50, 26), Color3.fromRGB(58, 84, 40) -- (the rot's, dark green: nothing here is blood)
+					local FLAME, WARM, WAX = Color3.fromRGB(255, 186, 96), Color3.fromRGB(255, 150, 70), Color3.fromRGB(206, 196, 168)
+					local ROT_G, ROT_D = Color3.fromRGB(150, 180, 70), Color3.fromRGB(46, 54, 28)
+					local PORCELAIN = Color3.fromRGB(214, 204, 188)
+					local function ball(cf, name, d, color, mat, tr)
+						return part({ Name = name, Shape = Enum.PartType.Ball, Size = Vector3.one * d, CFrame = cf, Material = mat or MAT.SmoothPlastic, Color = color, CanCollide = false, CanQuery = false, Transparency = tr or 0 })
+					end
+					local function sides(r)
+						local x1, z1, x2, z2 = r[1], r[2], r[3], r[4]
+						return { { x1, z1, x1, z2, 1, 0 }, { x2, z1, x2, z2, -1, 0 }, { x1, z1, x2, z1, 0, 1 }, { x1, z2, x2, z2, 0, -1 } }
+					end
+
+					-- the pieces ------------------------------------------------------------
+					-- a cluster of candles burnt down at different heights, wax pooled under them; one flickering light for the lot
+					local function candles(base, n, bright)
+						local tallest
+						for _ = 1, n do
+							local h = R(0.4, 1.8)
+							local c = base * CFrame.new(R(-0.8, 0.8), 0, R(-0.6, 0.6))
+							disc(c * CFrame.new(0, h / 2, 0), "Candle", R(0.28, 0.42), h, WAX:Lerp(SOOT, R(0, 0.25)), MAT.SmoothPlastic)
+							disc(c * CFrame.new(0, 0.03, 0), "Wax", R(0.6, 1.1), 0.06, WAX, MAT.SmoothPlastic)
+							local f = ball(c * CFrame.new(0, h + 0.14, 0), "CandleFlame", 0.24, FLAME, MAT.Neon)
+							f.CastShadow = false
+							if not tallest or h > tallest[1] then
+								tallest = { h, f }
+							end
+						end
+						glow(tallest[2], WARM, 16, bright or 0.9, true)
+					end
+					-- words on a wall, in the rot's ichor: a SurfaceGui on an invisible card just off the wall, drips run down from it
+					local function scrawl(cf, y, text, w, h, x, lvl)
+						x = x or 0
+						local wp = out(cf, x, 0, 0).Position
+						if y - h / 2 < DH + 1 and nearDoor(lvl or 1, wp.X, wp.Z, w / 2 + 1) then
+							return -- (it would hang over a doorway)
+						end
+						local card = P(out(cf, x, y, 0.09), "Scrawl", Vector3.new(w, h, 0.02), ICHOR, MAT.SmoothPlastic, false, 1)
+						local g = Instance.new("SurfaceGui")
+						g.Face, g.LightInfluence = Enum.NormalId.Front, 1
+						g.SizingMode, g.PixelsPerStud = Enum.SurfaceGuiSizingMode.PixelsPerStud, 40
+						g.Parent = card
+						local t = Instance.new("TextLabel")
+						t.Size, t.BackgroundTransparency, t.TextScaled = UDim2.fromScale(1, 1), 1, true
+						t.TextColor3, t.TextTransparency, t.Rotation = INK, 0.08, R(-3, 3)
+						t.Font = Enum.Font.Fantasy
+						pcall(function()
+							t.Font = Enum.Font.Creepster
+						end)
+						t.Text = text
+						t.Parent = g
+						for _ = 1, math.floor(w * 1.2) do
+							local len = R(0.4, 2.2)
+							P(out(cf, x + R(-w / 2, w / 2) * 0.9, y - h * 0.3 - len / 2, 0.08), "IchorDrip", Vector3.new(R(0.05, 0.1), len, 0.03), ICHOR, MAT.SmoothPlastic)
+						end
+					end
+					-- two pale points in a dark gap
+					local function eyes(cf, color)
+						for _, x in ipairs({ -0.15, 0.15 }) do
+							local e = P(cf * CFrame.new(x, 0, 0), "Eye", Vector3.new(0.12, 0.06, 0.02), color or Color3.fromRGB(230, 220, 170), MAT.Neon)
+							e.CastShadow = false
+						end
+					end
+					-- the Consul's rot: a clump of pale-stalked fungus, glowing under the caps, shedding spores
+					local function fungus(x, z, y, n, lit)
+						local hub
+						for _ = 1, n do
+							local d, h = R(0.5, 1.7), R(0.3, 1.5)
+							local c = CFrame.new(at3(x + R(-1.3, 1.3), y, z + R(-1.3, 1.3))) * CFrame.Angles(R(-0.25, 0.25), 0, R(-0.25, 0.25))
+							disc(c * CFrame.new(0, h / 2, 0), "Stalk", d * 0.22, h, Color3.fromRGB(150, 146, 112), MAT.SmoothPlastic)
+							disc(c * CFrame.new(0, h + 0.08, 0), "FungusCap", d, d * 0.2, ROT_D:Lerp(SOOT, R(0, 0.4)), MAT.Slate)
+							hub = disc(c * CFrame.new(0, h - 0.04, 0), "FungusGills", d * 0.85, 0.06, ROT_G, MAT.Neon)
+						end
+						local sp = Instance.new("ParticleEmitter")
+						sp.Texture, sp.Color, sp.LightEmission = "rbxasset://textures/particles/sparkles_main.dds", ColorSequence.new(ROT_G), 0.6
+						sp.Size, sp.Transparency = NumberSequence.new(0.12, 0), NumberSequence.new(0.2, 1)
+						sp.Lifetime, sp.Speed, sp.SpreadAngle, sp.Rate = NumberRange.new(3, 6), NumberRange.new(0.2, 0.6), Vector2.new(50, 50), 4
+						sp.Acceleration = Vector3.new(0, 0.25, 0)
+						sp.Parent = hub
+						if lit then
+							glow(hub, ROT_G, 11, 0.55)
+						end
+					end
+					-- its veins, branching up the wall behind a clump
+					local function veins(cf, h)
+						for _ = 1, cr:NextInteger(2, 4) do
+							local cx, cy, ang = R(-1.5, 1.5), 0.2, math.pi / 2 + R(-0.5, 0.5)
+							for _ = 1, cr:NextInteger(4, 8) do
+								local len = R(0.6, 1.4)
+								local nx, ny = cx + math.cos(ang) * len, cy + math.sin(ang) * len
+								if ny > h then
+									break
+								end
+								P(out(cf, (cx + nx) / 2, (cy + ny) / 2, 0.04) * CFrame.Angles(0, 0, ang), "RotVein", Vector3.new(len + 0.06, R(0.08, 0.2), 0.06), ROT_D:Lerp(ROT_G, R(0, 0.25)), MAT.Grass)
+								if cr:NextNumber() < 0.3 then
+									ball(out(cf, nx, ny, 0.06), "Pustule", R(0.15, 0.32), ROT_G, MAT.Neon)
+								end
+								cx, cy = nx, ny
+								ang += R(-0.6, 0.6)
+							end
+						end
+					end
+					local function doll(cf, turned) -- sat up, facing -z; turned: its head screwed round toward you
+						local dress = ({ Color3.fromRGB(96, 70, 80), Color3.fromRGB(70, 76, 96), Color3.fromRGB(110, 100, 84) })[cr:NextInteger(1, 3)]:Lerp(SOOT, R(0.2, 0.5))
+						P(cf * CFrame.new(0, 0.45, 0), "DollBody", Vector3.new(0.7, 0.8, 0.45), dress, MAT.Fabric)
+						for _, s in ipairs({ -1, 1 }) do
+							P(cf * CFrame.new(s * 0.17, 0.12, -0.35), "DollLeg", Vector3.new(0.2, 0.2, 0.7), PORCELAIN:Lerp(SOOT, 0.3), MAT.SmoothPlastic)
+							P(cf * CFrame.new(s * 0.45, 0.45, -0.05) * CFrame.Angles(0.3, 0, s * 0.15), "DollArm", Vector3.new(0.16, 0.65, 0.16), PORCELAIN:Lerp(SOOT, 0.3), MAT.SmoothPlastic)
+						end
+						local head = cf * CFrame.new(0, 1.15, 0) * CFrame.Angles(turned and 0.25 or 0, turned and 1.4 or R(-0.2, 0.2), 0)
+						ball(head, "DollHead", 0.62, PORCELAIN:Lerp(SOOT, R(0.05, 0.25)))
+						P(head * CFrame.new(0, 0.16, 0.08), "DollHair", Vector3.new(0.66, 0.46, 0.58), Color3.fromRGB(34, 24, 20), MAT.Fabric)
+						for _, x in ipairs({ -0.12, 0.12 }) do
+							P(head * CFrame.new(x, 0.02, -0.29), "DollEye", Vector3.new(0.1, 0.12, 0.03), VOID, MAT.SmoothPlastic)
+						end
+						P(head * CFrame.new(0.13, 0.12, -0.28) * CFrame.Angles(0, 0, 0.7), "DollCrack", Vector3.new(0.03, 0.34, 0.02), VOID, MAT.SmoothPlastic)
+					end
+					local function cradle(x, z, y, topY) -- caught mid-rock; a mobile of small bones over it
+						local c = CFrame.new(at3(x, y, z)) * CFrame.Angles(0, 0.4, 0) * CFrame.Angles(0, 0, 0.08)
+						P(c * CFrame.new(0, 1.1, 0), "Cradle", Vector3.new(2.2, 0.15, 3.4), DARKWOOD, MAT.Wood)
+						for _, s in ipairs({ -1, 1 }) do
+							P(c * CFrame.new(s * 1.05, 1.6, 0), "Cradle", Vector3.new(0.15, 1.0, 3.4), DARKWOOD, MAT.WoodPlanks)
+							P(c * CFrame.new(0, 1.8, s * 1.65), "Cradle", Vector3.new(2.2, 1.4, 0.15), DARKWOOD, MAT.WoodPlanks)
+							for k = -1, 1 do -- the rocker, in three
+								P(c * CFrame.new(s * 0.9, 0.25 + math.abs(k) * 0.12, k * 1.2) * CFrame.Angles(-k * 0.3, 0, 0), "CradleRocker", Vector3.new(0.15, 0.2, 1.3), DARKWOOD:Lerp(SOOT, 0.3), MAT.Wood)
+							end
+							for _, zz in ipairs({ -1.2, 1.2 }) do
+								P(c * CFrame.new(s * 0.9, 0.7, zz), "CradleLeg", Vector3.new(0.15, 0.9, 0.15), DARKWOOD, MAT.Wood)
+							end
+						end
+						P(c * CFrame.new(0, 2.6, 1.3) * CFrame.Angles(-0.5, 0, 0), "CradleHood", Vector3.new(2.3, 0.12, 1.4), VELVET:Lerp(SOOT, 0.4), MAT.Fabric)
+						P(c * CFrame.new(0, 1.4, 0.2), "Blanket", Vector3.new(1.8, 0.5, 2.4), VELVET:Lerp(SOOT, 0.5), MAT.Fabric)
+						P(c * CFrame.new(0.4, 1.62, -0.95) * CFrame.Angles(0.2, 0.3, 0), "TinyHand", Vector3.new(0.12, 0.1, 0.5), BONE, MAT.SmoothPlastic)
+						local hang = y + 7
+						P(CFrame.new(at3(x, (topY + hang) / 2, z)), "MobileChain", Vector3.new(0.08, topY - hang, 0.08), COL.Iron, MAT.Metal)
+						P(CFrame.new(at3(x, hang, z)) * CFrame.Angles(0, 0.6, 0), "Mobile", Vector3.new(2.4, 0.08, 0.08), COL.Iron, MAT.Metal)
+						P(CFrame.new(at3(x, hang, z)) * CFrame.Angles(0, 2.17, 0), "Mobile", Vector3.new(2.4, 0.08, 0.08), COL.Iron, MAT.Metal)
+						for i = 0, 3 do
+							local a = 0.6 + i * math.pi / 2
+							local px, pz = x + math.cos(a) * 1.15, z - math.sin(a) * 1.15
+							local len = R(0.8, 1.6)
+							P(CFrame.new(at3(px, hang - len / 2, pz)), "MobileString", Vector3.new(0.03, len, 0.03), DUST, MAT.Fabric)
+							if i % 2 == 0 then
+								ball(CFrame.new(at3(px, hang - len - 0.2, pz)), "TinySkull", 0.4, BONE)
+							else
+								P(CFrame.new(at3(px, hang - len - 0.25, pz)) * CFrame.Angles(0, 0, 0.3), "Bone", Vector3.new(0.12, 0.6, 0.12), BONE, MAT.SmoothPlastic)
+							end
+						end
+					end
+					local function mirror(cf) -- half under a dust sheet; in the half that shows, someone standing behind you
+						local c = out(cf, 0, 6.4, 0.2)
+						P(c, "MirrorFrame", Vector3.new(4, 7, 0.4), GILT:Lerp(SOOT, 0.5), MAT.Wood)
+						P(c * CFrame.new(0, 0, -0.22), "Mirror", Vector3.new(3.2, 6.2, 0.05), Color3.fromRGB(40, 44, 48), MAT.Glass).Reflectance = 0.35
+						P(c * CFrame.new(0.75, -0.8, -0.25), "MirrorFigure", Vector3.new(1.1, 2.8, 0.02), Color3.fromRGB(16, 16, 18), MAT.SmoothPlastic, false, 0.25)
+						P(c * CFrame.new(0.75, 1.05, -0.26), "MirrorFace", Vector3.new(0.65, 0.85, 0.02), Color3.fromRGB(150, 146, 136), MAT.SmoothPlastic, false, 0.5)
+						eyes(c * CFrame.new(0.75, 1.15, -0.27), Color3.fromRGB(200, 60, 40))
+						P(c * CFrame.new(-0.85, 0.3, -0.35) * CFrame.Angles(0, 0, 0.04), "MirrorSheet", Vector3.new(2.6, 7.4, 0.08), SHEET:Lerp(DUST, 0.4), MAT.Fabric)
+						P(out(cf, -1.2, 0.15, 0.9) * CFrame.Angles(0, 0.3, 0), "MirrorSheet", Vector3.new(2.4, 0.25, 1.6), SHEET:Lerp(DUST, 0.5), MAT.Fabric)
+					end
+					local function jars(cf) -- two shelves of specimens in cloudy green, a light behind them
+						local lightJar
+						for _, sy in ipairs({ 3.6, 6.3 }) do
+							P(out(cf, 0, sy, 0.6), "Shelf", Vector3.new(7.4, 0.2, 1.2), DARKWOOD, MAT.Wood)
+							for _, x in ipairs({ -3.2, 3.2 }) do
+								P(out(cf, x, sy - 0.4, 0.3), "ShelfBracket", Vector3.new(0.2, 0.7, 0.6), COL.Iron, MAT.Metal)
+							end
+							for i = 1, 4 do
+								local x, h, d = -2.6 + (i - 1) * 1.75 + R(-0.2, 0.2), R(1.1, 1.8), R(0.8, 1.05)
+								local c = out(cf, x, sy + 0.1, 0.6)
+								local jar = disc(c * CFrame.new(0, h / 2, 0), "Jar", d, h, ROT_G:Lerp(Color3.fromRGB(110, 100, 60), R(0, 0.6)), MAT.Glass)
+								jar.Transparency = 0.45
+								disc(c * CFrame.new(0, h + 0.08, 0), "JarLid", d * 0.9, 0.16, COL.Iron, MAT.Metal)
+								local what = cr:NextNumber()
+								if what < 0.35 then -- an eye, staring out
+									local e = ball(c * CFrame.new(0, h * 0.5, 0), "Specimen", d * 0.45, Color3.fromRGB(210, 200, 180))
+									ball(e.CFrame * CFrame.new(0, 0, -d * 0.18), "SpecimenPupil", d * 0.16, Color3.fromRGB(30, 60, 40))
+								elseif what < 0.7 then -- a curled shape, too small to be anything you'd name
+									ball(c * CFrame.new(0, h * 0.45, 0), "Specimen", d * 0.6, Color3.fromRGB(140, 104, 96):Lerp(SOOT, R(0, 0.3)))
+									ball(c * CFrame.new(0.1, h * 0.7, 0), "Specimen", d * 0.35, Color3.fromRGB(150, 116, 106))
+								else -- a hand
+									P(c * CFrame.new(0, h * 0.45, 0) * CFrame.Angles(0.2, 0.5, 0.1), "Specimen", Vector3.new(d * 0.35, d * 0.7, 0.15), Color3.fromRGB(150, 120, 104), MAT.SmoothPlastic)
+								end
+								lightJar = lightJar or jar
+							end
+						end
+						glow(lightJar, ROT_G, 12, 0.6)
+					end
+					local function tally(cf, x0, y0t, groups) -- days counted, scratched into the plaster
+						for g = 0, groups - 1 do
+							local gx, gy = x0 + (g % 6) * 1.2, y0t - math.floor(g / 6) * 1.1
+							for k = 0, 3 do
+								P(out(cf, gx + k * 0.17, gy, 0.04), "Tally", Vector3.new(0.06, 0.75, 0.03), Color3.fromRGB(122, 114, 102), MAT.Concrete)
+							end
+							P(out(cf, gx + 0.26, gy, 0.05) * CFrame.Angles(0, 0, 1.0), "Tally", Vector3.new(0.06, 0.95, 0.03), Color3.fromRGB(122, 114, 102), MAT.Concrete)
+						end
+					end
+					-- room by room: panelling and cornice, candles, rot ----------------------
+					for lvl = 1, 2 do
+						for _, r in ipairs(ROOMS_IN) do
+							local y0, top = lvl == 1 and G0 or FL, lvl == 1 and FL - 2 or CEIL
+							for _, s in ipairs(sides(r)) do
+								local len = math.abs(s[3] - s[1]) + math.abs(s[4] - s[2])
+								local n = math.max(1, math.floor(len / 6))
+								local w = len / n
+								for i = 0, n - 1 do -- (in short lengths, so a doorway only loses the one it's in)
+									local t = (i + 0.5) / n
+									local px, pz = s[1] + (s[3] - s[1]) * t, s[2] + (s[4] - s[2]) * t
+									if not nearDoor(lvl, px, pz, w / 2 + 0.5) then
+										local cf = wallCF(px, y0, pz, s[5], s[6])
+										P(out(cf, 0, 2.1, 0.07), "Wainscot", Vector3.new(w, 4.2, 0.14), PANEL:Lerp(SOOT, R(0, 0.3)), MAT.Wood)
+										P(out(cf, 0, 2.3, 0.17), "WainscotPanel", Vector3.new(w - 1, 2.8, 0.06), PANEL_LT:Lerp(SOOT, R(0, 0.35)), MAT.WoodPlanks)
+										P(out(cf, 0, 4.3, 0.16), "ChairRail", Vector3.new(w, 0.3, 0.32), RAIL, MAT.Wood)
+									end
+								end
+								local mid = wallCF((s[1] + s[3]) / 2, y0, (s[2] + s[4]) / 2, s[5], s[6])
+								P(out(mid, 0, top - y0 - 0.35, 0.2), "Cornice", Vector3.new(len, 0.7, 0.4), TRIM:Lerp(SOOT, 0.3), MAT.Slate)
+								P(out(mid, 0, top - y0 - 0.95, 0.1), "Cornice", Vector3.new(len, 0.5, 0.2), TRIM:Lerp(SOOT, 0.5), MAT.Slate)
+							end
+							-- candles along the walls, and the rot: a clump or two (more upstairs), its veins up the wall
+							local ss = sides(r)
+							local placed, tries = 0, 0
+							local want = lvl == 1 and { 2, 1 } or { 2, 2 } -- (candle clusters, rot clumps)
+							while placed < want[1] + want[2] and tries < 30 do
+								tries += 1
+								local s = ss[cr:NextInteger(1, 4)]
+								local t = R(0.12, 0.88)
+								local px, pz = s[1] + (s[3] - s[1]) * t, s[2] + (s[4] - s[2]) * t
+								local ix, iz = px + s[5] * 1.4, pz + s[6] * 1.4
+								if not nearDoor(lvl, px, pz, 3) and not inHole(lvl, ix, iz) then
+									local cf = wallCF(px, y0, pz, s[5], s[6])
+									if placed < want[1] then
+										candles(out(cf, 0, 0, 1.1), cr:NextInteger(3, 6))
+									else
+										fungus(ix, iz, y0, cr:NextInteger(4, 7), placed % 2 == 0)
+										veins(cf, lvl == 1 and 7 or 11)
+									end
+									placed += 1
+								end
+							end
+						end
+					end
+
+					-- set pieces -------------------------------------------------------------
+					-- the ajar wardrobes (servants' hall, dormitory): something in the dark of each, watching
+					for _, y in ipairs({ G0, FL }) do
+						eyes(out(wallCF(-243, y, -100, -1, 0), 0, 0, 1.25) * CFrame.new(0.95, 6.5, -1.3))
+					end
+					-- the foyer: a mirror on the back wall
+					if not nearDoor(1, -228, -33, 3) then
+						mirror(wallCF(-228, G0, -33, 0, 1))
+					end
+					-- the rear hall: votive candles under the Master's portrait, and what's been written beside it
+					candles(floorCF(-219.5, G0, -144.6), 6, 1.1)
+					candles(floorCF(-210.5, G0, -144.6), 5, 0.7)
+					scrawl(wallCF(-230, G0, -146, 0, 1), 9, "HE NEVER CAME DOWN", 9, 1.6)
+					-- the dormitory: dolls sat up on the beds (one has turned its head), a cradle, and the wall
+					local beds = 0
+					for z = -142, -96, 9 do
+						beds += 1
+						if beds ~= 3 then
+							doll(CFrame.new(at3(-264.4, FL + 1.6, z + 2.4)) * CFrame.Angles(0, -math.pi / 2, 0), beds == 4)
+						end
+					end
+					cradle(-250, -88, FL, CEIL)
+					scrawl(wallCF(-243, FL, -122, -1, 0), 8, "IT ONLY OPENS FROM HERE", 8, 1.5, 0, 2)
+					-- the servants' hall: the days, counted
+					tally(wallCF(-266, G0, -112, 1, 0), -3.5, 7, 22)
+					-- the kitchens: jars on the wall, a message on the back wall
+					jars(wallCF(-164, G0, -118, -1, 0))
+					scrawl(wallCF(-171, G0, -146, 0, 1), 9, "KEEP THEM FRESH FOR HER", 9, 1.5)
+					-- the library: his pages pinned up over the wall, string run between them, and her face in the middle of it
+					do
+						local cf = wallCF(-243, G0, -60, -1, 0)
+						local pins = {}
+						for _ = 1, 16 do
+							local x, y = R(-5, 5), R(5, 11)
+							P(out(cf, x, y, 0.06) * CFrame.Angles(0, 0, R(-0.25, 0.25)), "Page", Vector3.new(0.9, 1.2, 0.02), Color3.fromRGB(150, 140, 116):Lerp(DUST, R(0, 0.6)), MAT.SmoothPlastic)
+							P(out(cf, x, y + 0.45, 0.08), "Pin", Vector3.new(0.08, 0.08, 0.06), Color3.fromRGB(150, 30, 30), MAT.Metal)
+							table.insert(pins, Vector2.new(x, y + 0.45))
+						end
+						P(out(cf, 0, 8, 0.07), "Sketch", Vector3.new(2, 2.6, 0.02), Color3.fromRGB(170, 160, 136), MAT.SmoothPlastic)
+						P(out(cf, 0, 8.2, 0.09), "SketchFace", Vector3.new(0.9, 1.2, 0.01), Color3.fromRGB(60, 50, 44), MAT.SmoothPlastic)
+						for i = 1, 8 do -- red string, each from a page to her
+							local p = pins[i]
+							local mid, d = (p + Vector2.new(0, 8)) / 2, Vector2.new(0, 8) - p
+							P(out(cf, mid.X, mid.Y, 0.1) * CFrame.Angles(0, 0, math.atan2(d.Y, d.X)), "String", Vector3.new(d.Magnitude, 0.04, 0.02), Color3.fromRGB(150, 24, 24), MAT.Fabric)
+						end
+						candles(floorCF(-246, G0, -60), 3, 0.6)
+					end
+					-- the feast tables: their candles still lit
+					for _, y in ipairs({ G0, FL }) do
+						for _, z in ipairs({ -72, -56, -40 }) do
+							candles(CFrame.new(at3(-178, y + 3.06, z)), 3, 0.7)
+						end
+					end
+					-- the landing: HER SHRINE, against its east wall - Ossaria, "my star", kept in candles and dead roses, and
+					-- what he wrote round her
+					do
+						local sz
+						for _, z in ipairs({ -24, -19, -29 }) do
+							if not nearDoor(2, -189, z, 3) then
+								sz = z
+								break
+							end
+						end
+						if sz then
+							local cf = wallCF(-189, FL, sz, -1, 0)
+							P(out(cf, 0, 1.5, 1.0), "ShrineTable", Vector3.new(4.4, 3, 2), DARKWOOD, MAT.Wood, true)
+							P(out(cf, 0, 3.04, 1.0), "ShrineCloth", Vector3.new(4.6, 0.06, 2.2), VELVET:Lerp(SOOT, 0.2), MAT.Fabric)
+							P(out(cf, 0, 2.3, 2.02), "ShrineCloth", Vector3.new(4.6, 1.5, 0.05), VELVET:Lerp(SOOT, 0.3), MAT.Fabric)
+							local c = out(cf, 0, 7.6, 0.25)
+							P(c, "PortraitFrame", Vector3.new(4.8, 5.8, 0.5), GILT, MAT.Wood)
+							P(c * CFrame.new(0, 0, -0.27), "Portrait", Vector3.new(3.8, 4.8, 0.06), Color3.fromRGB(40, 30, 40), MAT.Fabric)
+							P(c * CFrame.new(0, -1.2, -0.31), "PortraitSitter", Vector3.new(2.8, 2.2, 0.04), Color3.fromRGB(70, 20, 30), MAT.Fabric)
+							P(c * CFrame.new(0, 0.5, -0.31), "PortraitSitter", Vector3.new(1.4, 1.9, 0.04), Color3.fromRGB(26, 20, 18), MAT.Fabric)
+							P(c * CFrame.new(0, 0.4, -0.33), "PortraitSitter", Vector3.new(0.9, 1.1, 0.04), Color3.fromRGB(196, 184, 168), MAT.Fabric)
+							for _, a in ipairs({ 0, math.pi / 4 }) do -- her star, over her head
+								P(c * CFrame.new(0, 1.85, -0.34) * CFrame.Angles(0, 0, a), "Star", Vector3.new(0.4, 0.4, 0.03), Color3.fromRGB(255, 214, 120), MAT.Neon)
+							end
+							candles(out(cf, -1.2, 3.07, 1.0), 5, 1.3)
+							candles(out(cf, 1.4, 3.07, 0.8), 3, 0.5)
+							disc(out(cf, 0.2, 3.07 + 0.45, 1.3), "Vase", 0.5, 0.9, TRIM, MAT.Marble)
+							for _ = 1, 5 do -- roses, long dead
+								local s = out(cf, 0.2 + R(-0.15, 0.15), 3.9 + 0.3, 1.3) * CFrame.Angles(R(-0.35, 0.35), 0, R(-0.45, 0.45))
+								P(s, "RoseStem", Vector3.new(0.06, 1.1, 0.06), Color3.fromRGB(46, 40, 26), MAT.Wood)
+								ball(s * CFrame.new(0, 0.6, 0), "Rose", 0.3, Color3.fromRGB(70, 14, 22), MAT.Fabric)
+							end
+							for _ = 1, 4 do -- his letters to her
+								P(out(cf, R(-1.8, 1.8), 3.09, R(0.4, 1.7)) * CFrame.Angles(0, R(-0.6, 0.6), 0), "Letter", Vector3.new(0.8, 0.02, 1.1), Color3.fromRGB(160, 150, 124), MAT.SmoothPlastic)
+							end
+							scrawl(cf, 12.2, "FORGIVE ME", 6, 1.2, 0, 2)
+							scrawl(cf, 7.6, "forgive me\nforgive me\nforgive me\nforgive me", 1.9, 5, -3.7, 2)
+							scrawl(cf, 7.6, "my star\nmy star\nmy star\nmy star", 1.9, 5, 3.7, 2)
+						end
+					end
+				end)()
 			end
 			Detail.useRng(oldDetailRng)
 			rng = oldRng
@@ -7682,7 +7938,7 @@ function MapBuilder.build()
 					end
 					local HUTS = {
 						{ -122, 292, math.pi / 2, Color3.fromRGB(110, 40, 46), { Attr = "BleakManorKey", Text = "Key to Bleak Manor. Black iron, heavy, cold in the hand." } },
-						{ -25, 405, 0, Color3.fromRGB(84, 58, 110), { Attr = "Has_DarkBook", Text = "Dark Book. Its pages are slick, and warm, and the words crawl." } },
+						{ -25, 405, 0, Color3.fromRGB(84, 58, 110), { Text = "Empty. Only a book's outline, pressed into the rotten cloth at the bottom." } },
 						{ 72, 449, math.pi, Color3.fromRGB(140, 104, 60), { Attr = "Has_FoulDagger", Text = "Foul Dagger. A short black blade, slick with something that should not be wet." } },
 					}
 					for _, h in ipairs(HUTS) do
@@ -8564,6 +8820,13 @@ function MapBuilder.build()
 				table.insert(rooms, { X[i] + (i == 1 and 0 or 1), Z[j] + (j == 1 and 0 or 1), X[i + 1] - (i == 4 and 0 or 1), Z[j + 1] - (j == 4 and 0 or 1), i == 1 and j == 4 }) -- (the far west room has the stair down in it)
 			end
 		end
+		-- its wardens: the prison's elite guard (Characters/Warder), one in the middle of most rooms of the grid (clear of the
+		-- pillars at 30/70%), the last beside the stair's hole - all turned toward the far west room, the way down
+		for _, g in ipairs({ { 4, 4 }, { 3, 4 }, { 2, 4 }, { 4, 3 }, { 3, 3 }, { 2, 3 }, { 1, 3 }, { 2, 2 }, { 1, 2 } }) do
+			local x, z = (X[g[1]] + X[g[1] + 1]) / 2, (Z[g[2]] + Z[g[2] + 1]) / 2
+			table.insert(info.EnemySpawns, { Type = "Warder", CFrame = CFrame.lookAt(Vector3.new(x, FY + 3.2, z), Vector3.new(-34, FY + 3.2, 82)) })
+		end
+		table.insert(info.EnemySpawns, { Type = "Warder", CFrame = CFrame.lookAt(Vector3.new(-24, FY + 3.2, 76), Vector3.new(-17, FY + 3.2, 82)) })
 		table.insert(rooms, { 62, 105, 88, 133, false })
 		table.insert(rooms, { 58, 135, 88, 163, true })
 		table.insert(rooms, { 58, 166, 88, 175, false })
@@ -8611,7 +8874,10 @@ function MapBuilder.build()
 		info.PrisonGatePrompt = prompt(gateSpot, "Inspect", "Portcullis", 0, 8)
 
 		-- the outside: string courses, buttresses and arrow slits on each face
-		local function facade(axis, c, a, b, dir) -- c: the wall's outer face, dir: which way is out
+		local function facade(axis, c, a, b, dir, gap) -- c: the wall's outer face, dir: which way is out; gap: { u1, u2 } kept clear above the roof
+			local function clear(u1, u2)
+				return not gap or u2 <= gap[1] or u1 >= gap[2]
+			end
 			local function put(u1, u2, y1, y2, d1, d2, name, color, mat)
 				local lo, hi = math.min(c + dir * d1, c + dir * d2), math.max(c + dir * d1, c + dir * d2)
 				if axis == "x" then
@@ -8621,17 +8887,25 @@ function MapBuilder.build()
 			end
 			put(a, b, 29.2, 30.6, 0, 1.2, "WingCourse", TRIM, MAT.Slate)
 			put(a, b, 41, 42.6, 0, 1.2, "WingCourse", TRIM, MAT.Slate)
-			put(a, b, 55, 56.6, 0, 1.2, "WingCourse", TRIM, MAT.Slate)
+			for _, r in ipairs(gap and { { a, gap[1] }, { gap[2], b } } or { { a, b } }) do
+				put(r[1], r[2], 55, 56.6, 0, 1.2, "WingCourse", TRIM, MAT.Slate)
+			end
 			for u = a + 8, b - 8, 16 do
-				put(u - 1.5, u + 1.5, -8, 55, 0, 2.2, "WingButtress")
+				if clear(u - 1.5, u + 1.5) then
+					put(u - 1.5, u + 1.5, -8, 55, 0, 2.2, "WingButtress")
+				else
+					wr:NextNumber() -- (its colour's draw, so the wing's stream stays where it was)
+				end
 			end
 			for u = a + 16, b - 8, 16 do
 				put(u - 0.35, u + 0.35, 33, 38, 0, 0.15, "ArrowSlit", VOIDC, MAT.Slate)
-				put(u - 0.35, u + 0.35, 47, 52, 0, 0.15, "ArrowSlit", VOIDC, MAT.Slate)
+				if clear(u - 0.35, u + 0.35) then
+					put(u - 0.35, u + 0.35, 47, 52, 0, 0.15, "ArrowSlit", VOIDC, MAT.Slate)
+				end
 			end
 		end
 		facade("x", -44, -56, 92, -1)
-		facade("z", -56, -44, 105, -1)
+		facade("z", -56, -44, 105, -1, { 79, 91 }) -- (the gap: where the drawbridge comes down onto the roof)
 		facade("z", 92, -44, 181, 1)
 
 		-------------------------------------------------------------------
@@ -9427,6 +9701,872 @@ function MapBuilder.build()
 		pe.Acceleration = Vector3.new(0.5, 1.4, 0)
 		pe.SpreadAngle = Vector2.new(25, 25)
 		pe.Parent = plume
+
+		-- THE UNDERFIRE: the smouldering hole's far side. Outside the breach the ground is gouged into a wide burning pit;
+		-- its throat drops (a cut, in init.server) into a buried room far below: dark rock lit only by fire - a rubble heap
+		-- under the broken ceiling, lava channels along the walls, braziers. Its own random stream. info.Underfire: Gate (the
+		-- breach's lip), Pit, Landing, Zone.
+		do
+			local ur = Random.new(7070)
+			local under = Instance.new("Folder")
+			under.Name = "Underfire"
+			under.Parent = map
+			local function U(x1, y1, z1, x2, y2, z2, material, color, name)
+				return box(x1, y1, z1, x2, y2, z2, material, color, name, under)
+			end
+			local function R(a, b)
+				return ur:NextNumber(a, b)
+			end
+			local ROCK, DEEP = Color3.fromRGB(30, 27, 27), Color3.fromRGB(20, 18, 19)
+			local EMBER = Color3.fromRGB(255, 70, 20)
+			local function dark()
+				return ur:NextNumber() < 0.5 and ROCK or DEEP
+			end
+			local function tilt(p, k)
+				p.CFrame *= CFrame.Angles(R(-k, k), R(0, 6.28), R(-k, k))
+			end
+			local function lit(parent, color, range, brightness, shadows)
+				local l = Instance.new("PointLight")
+				l.Color, l.Range, l.Brightness, l.Shadows = color, math.min(range * 1.6, 60), brightness, shadows or false -- (heat throws its light far down here)
+				l.Parent = parent
+				addFlicker(l)
+			end
+			-- what is laid on freshly cut terrain (found by a ray down onto it) is placed a moment after the build: until the
+			-- engine catches up with the new terrain, a ray finds nothing there (see the task.spawn at the end)
+			local later = {}
+			-- an invisible anchor for fire and particles
+			local function ghost(x, y, z, sx, sy, sz)
+				return part({ Name = "Fx", Size = Vector3.new(sx or 1, sy or 1, sz or 1), CFrame = CFrame.new(x, y, z), Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, Parent = under })
+			end
+			local function blaze(x, y, z, size)
+				local f = Instance.new("Fire")
+				f.Size, f.Heat = size, size
+				f.Color, f.SecondaryColor = Color3.fromRGB(255, 110, 30), Color3.fromRGB(110, 14, 8)
+				f.Parent = ghost(x, y, z)
+				return f.Parent
+			end
+			local function pile(cx, cz, rad, n, smax)
+				for _ = 1, n do
+					local a, r, s = R(0, 6.28), R(0, rad), R(smax * 0.4, smax)
+					tilt(part({ Name = "Rubble", Size = Vector3.new(s, s * R(0.6, 1), s * R(0.8, 1.2)), CFrame = CFrame.new(cx + math.cos(a) * r, -110 + (1 - r / (rad + 1)) * smax * 0.8 + s * 0.3, cz + math.sin(a) * r), Material = MAT.Rock, Color = dark(), Parent = under }), 0.6)
+				end
+			end
+
+			-- THE PIT: the ground east of the breach (x 88..92 is its wall) blown into a bowl, all of it terrain: scorched basalt
+			-- shading into glowing cracked lava, a throat at the bottom, and only small things laid on it, each set on the real
+			-- surface (a ray down onto the terrain): ember chips, flames, charred stones, a crown of leaning shards.
+			local PX, PY, PZ = 108, -20, -32
+			local T = workspace.Terrain
+			T:FillBall(Vector3.new(PX, -4, PZ), 18, Enum.Material.Air)
+			T:FillBall(Vector3.new(PX, -22, PZ), 6, Enum.Material.Air)
+			do -- voxel by voxel (a Fill this narrow leaves half-full voxels): rock under the thin ground (above the keep's cut,
+				-- y -50), the throat cut down into it (y -44..-20), then paint: lava at the bottom, mottled lava and basalt up
+				-- the slope, scorch fading out past the rim
+				local reg = Region3.new(Vector3.new(PX - 28, -52, PZ - 28), Vector3.new(PX + 28, 0, PZ + 28)):ExpandToGrid(4)
+				local mats, occ = T:ReadVoxels(reg, 4)
+				local o = reg.CFrame.Position - reg.Size / 2
+				for i = 1, #mats do
+					for j = 1, #mats[i] do
+						for k = 1, #mats[i][j] do
+							local d0, y = math.sqrt((o.X + (i - 0.5) * 4 - PX) ^ 2 + (o.Z + (k - 0.5) * 4 - PZ) ^ 2), o.Y + (j - 0.5) * 4
+							if d0 < 12 and y < -36 then
+								occ[i][j][k] = 1
+							end
+							if d0 < 6.5 and y > -44 and y < -20 then
+								occ[i][j][k] = 0
+							end
+							if occ[i][j][k] > 0 then
+								local d = d0 + R(-2, 2)
+								if d < 10 then
+									mats[i][j][k] = MAT.CrackedLava
+								elseif d < 15 then
+									mats[i][j][k] = ur:NextNumber() < 0.4 and MAT.CrackedLava or MAT.Basalt
+								elseif d < 24 and ur:NextNumber() < (24 - d) / 9 then
+									mats[i][j][k] = MAT.Basalt
+								end
+							end
+						end
+					end
+				end
+				T:WriteVoxels(reg, 4, mats, occ)
+			end
+			local onlyTerrain = RaycastParams.new()
+			onlyTerrain.FilterType = Enum.RaycastFilterType.Include
+			onlyTerrain.FilterDescendantsInstances = { T }
+			-- the surface at angle a (0 = east, away from the wing), r out from the centre: position and normal, or nil
+			local function ground(a, r)
+				return workspace:Raycast(Vector3.new(PX + math.cos(a) * r, 10, PZ + math.sin(a) * r), Vector3.new(0, -60, 0), onlyTerrain)
+			end
+			local function anyAngle()
+				local a = R(-2.5, 2.5) -- (never the wing's side, nor the line of the leap)
+				return a
+			end
+			-- flames on the slope and down the throat, the throat's glow, smoke and sparks out of it
+			table.insert(later, function()
+				for _ = 1, 12 do
+					local hit = ground(R(0, 6.28), R(5, 12))
+					if hit then
+						blaze(hit.Position.X, hit.Position.Y + 0.6, hit.Position.Z, R(4, 9))
+					end
+				end
+			end)
+			for k = 1, 4 do
+				local a = k / 4 * math.pi * 2
+				blaze(PX + math.cos(a) * 2.5, -24 - k * 2.5, PZ + math.sin(a) * 2.5, 7)
+			end
+			local throat = ghost(PX, -30, PZ)
+			lit(throat, EMBER, 40, 3, true)
+			local column = ghost(PX, -22, PZ)
+			lit(column, Color3.fromRGB(255, 96, 32), 60, 2.2)
+			local smoke = Instance.new("ParticleEmitter")
+			smoke.Texture = "rbxasset://textures/particles/smoke_main.dds"
+			smoke.Color = ColorSequence.new(Color3.fromRGB(46, 40, 38))
+			smoke.Size = NumberSequence.new(4, 16)
+			smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 1) })
+			smoke.Lifetime = NumberRange.new(5, 8)
+			smoke.Rate = 10
+			smoke.Speed = NumberRange.new(6, 10)
+			smoke.SpreadAngle = Vector2.new(12, 12)
+			smoke.Parent = column
+			local sparks = Instance.new("ParticleEmitter")
+			sparks.Color = ColorSequence.new(EMBER)
+			sparks.LightEmission = 1
+			sparks.Size = NumberSequence.new(0.35, 0)
+			sparks.Lifetime = NumberRange.new(2, 4)
+			sparks.Rate = 30
+			sparks.Speed = NumberRange.new(5, 14)
+			sparks.SpreadAngle = Vector2.new(35, 35)
+			sparks.Acceleration = Vector3.new(0, 3, 0)
+			sparks.Parent = throat
+			local haze = ghost(PX, -17, PZ, 22, 1, 22) -- (low smoke drifting over the bowl)
+			local drift = smoke:Clone()
+			drift.Size = NumberSequence.new(3, 8)
+			drift.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.75), NumberSequenceKeypoint.new(1, 1) })
+			drift.Speed = NumberRange.new(0.5, 1.5)
+			drift.Rate = 6
+			drift.SpreadAngle = Vector2.new(60, 60)
+			drift.Parent = haze
+			-- ember chips and charred stones strewn over the slope (strew: one, lying on the surface a ray found)
+			local function strew(hit, glowing)
+				local s = R(0.25, 0.8)
+				local glow = ur:NextNumber() < (glowing or 0.6)
+				local axis = Vector3.yAxis:Cross(hit.Normal) -- (lying on the slope: up turned to the surface's normal)
+				local flat = axis.Magnitude > 1e-3 and CFrame.fromAxisAngle(axis.Unit, math.asin(math.min(axis.Magnitude, 1))) or CFrame.identity
+				local cf = CFrame.new(hit.Position) * flat * CFrame.Angles(R(-0.3, 0.3), R(0, 6.28), R(-0.3, 0.3))
+				local size = glow and Vector3.new(s, s * 0.4, s * R(0.6, 1.4)) or Vector3.new(s * 2, s * 1.4, s * R(1.6, 2.6))
+				part({ Name = glow and "PitEmber" or "PitCinder", Size = size, CFrame = cf, Material = glow and MAT.Neon or MAT.Basalt, Color = glow and EMBER:Lerp(Color3.fromRGB(150, 30, 8), ur:NextNumber()) or dark(), CanCollide = false, Parent = under })
+			end
+			table.insert(later, function()
+				for _ = 1, 70 do
+					local hit = ground(R(0, 6.28), R(3, 15))
+					if hit then
+						strew(hit)
+					end
+				end
+			end)
+			table.insert(later, function()
+				for _ = 1, 12 do -- half-buried charred boulders on the rim
+					local hit = ground(anyAngle(), R(13, 21))
+					if hit then
+						local s = R(2, 4.5)
+						tilt(part({ Name = "PitRock", Size = Vector3.new(s, s * R(0.6, 1), s * R(0.8, 1.3)), CFrame = CFrame.new(hit.Position + Vector3.new(0, s * 0.15, 0)), Material = MAT.Basalt, Color = dark(), Parent = under }), 0.5)
+					end
+				end
+				-- shards: clusters round the rim leaning out (blown outward), and a few on the slope bent in over the throat;
+				-- some burn at the tip
+				local function shard(hit, h, lean, burning)
+					local out = Vector3.new(hit.Position.X - PX, 0, hit.Position.Z - PZ).Unit
+					local up = CFrame.fromAxisAngle(Vector3.yAxis:Cross(out).Unit, lean) -- (+lean: top tips away from the pit)
+					local w = R(0.8, 2) * (h / 8 + 0.5)
+					local cf = CFrame.new(hit.Position) * up * CFrame.Angles(R(-0.12, 0.12), R(0, 6.28), R(-0.12, 0.12)) * CFrame.new(0, h / 2 - 1.2, 0)
+					part({ Name = "PitShard", Size = Vector3.new(w, h, w * R(0.5, 0.9)), CFrame = cf, Material = ur:NextNumber() < 0.6 and MAT.Basalt or MAT.Slate, Color = dark():Lerp(Color3.fromRGB(44, 36, 34), ur:NextNumber() * 0.5), Parent = under })
+					local tip = cf * CFrame.new(0, h / 2 - 0.4, 0) * CFrame.Angles(0, 0, 0.55)
+					part({ Name = "PitShardTip", Size = Vector3.new(w * 0.7, h * 0.22, w * 0.45), CFrame = tip, Material = MAT.Basalt, Color = DEEP, Parent = under })
+					if burning then
+						local f = blaze(tip.X, tip.Y + 0.6, tip.Z, R(3, 6))
+						if ur:NextNumber() < 0.5 then
+							lit(f, EMBER, 16, 1)
+						end
+					end
+				end
+				for c = 1, 15 do
+					local a, r = anyAngle(), R(14, 22)
+					for _ = 1, ur:NextInteger(2, 4) do
+						local hit = ground(a + R(-0.08, 0.08), r + R(-1.5, 1.5))
+						if hit then
+							shard(hit, R(3, 12), R(0.15, 0.5), c % 3 == 0 and ur:NextNumber() < 0.6)
+						end
+					end
+				end
+				for _ = 1, 8 do
+					local hit = ground(anyAngle(), R(8, 12))
+					if hit then
+						shard(hit, R(3, 7), -R(0.3, 0.6), ur:NextNumber() < 0.3)
+					end
+				end
+			end)
+
+			-- THE ROOM: the buried room the pit happened to break into, kept quiet: x 112..172, z -30..20, floor y -110, ceiling
+			-- y -86; the heap under the broken ceiling, four columns (one fallen), low lava channels along the long walls, a few
+			-- braziers. A door in its east wall leads round a corner to the fortress hall below.
+			local X1, X2, Z1, Z2, FY, CY = 112, 172, -30, 20, -110, -86
+			local HX, HZ = 128, -5 -- the broken ceiling's hole
+			T:FillBlock(CFrame.new((X1 + X2) / 2, (FY + CY) / 2 + 10, (Z1 + Z2) / 2), Vector3.new(X2 - X1 + 16, CY - FY + 40, Z2 - Z1 + 16), Enum.Material.Air) -- (the ground the room and its shaft are cut from)
+			T:FillBlock(CFrame.new(198, -88, 43), Vector3.new(80, 60, 118), Enum.Material.Air) -- (and the corridor and the hall)
+			local function brazier(x, z, size, bright, tall)
+				local h = tall or 4
+				U(x - 1, FY, z - 1, x + 1, FY + h, z + 1, MAT.Basalt, DEEP, "Pedestal")
+				U(x - 1.7, FY + h, z - 1.7, x + 1.7, FY + h + 0.8, z + 1.7, MAT.Metal, Color3.fromRGB(26, 22, 22), "Bowl")
+				lit(blaze(x, FY + h + 1.6, z, size), EMBER, 30, bright)
+			end
+			local function column(x, z, top, broken, hw) -- (hw: the shaft's half-width, 2 by default)
+				hw = hw or 2
+				local b = hw + 0.6
+				U(x - b, FY, z - b, x + b, FY + 1, z + b, MAT.Basalt, DEEP, "ColumnBase")
+				local h = broken and R(7, 12) or top - FY - 2.2
+				U(x - hw, FY + 1, z - hw, x + hw, FY + 1 + h, z + hw, MAT.Basalt, ROCK, "Column")
+				if broken then
+					tilt(part({ Name = "FallenDrum", Size = Vector3.new(hw * 2, hw * 2, R(7, 10)), CFrame = CFrame.new(x + R(1.5, 2.5) * hw, FY + hw, z + R(-2, 2)) * CFrame.Angles(0, R(-0.6, 0.6), 0), Material = MAT.Basalt, Color = ROCK, Parent = under }), 0)
+					pile(x, z, hw * 2, 5, 2.5)
+				else
+					U(x - b, top - 1.2, z - b, x + b, top, z + b, MAT.Basalt, DEEP, "ColumnCap")
+				end
+			end
+			U(X1 - 2, FY - 2, Z1 - 2, X2 + 2, FY, Z2 + 2, MAT.Slate, DEEP, "Floor")
+			U(X1 - 2, FY, Z1 - 2, X1, CY + 2, Z2 + 2, MAT.Rock, ROCK, "Wall")
+			U(X2, FY, Z1 - 2, X2 + 2, CY + 2, HZ - 4, MAT.Rock, ROCK, "Wall") -- (the east wall, round its door: z -9..-1, 12 high)
+			U(X2, FY, HZ + 4, X2 + 2, CY + 2, Z2 + 2, MAT.Rock, ROCK, "Wall")
+			U(X2, FY + 12, HZ - 4, X2 + 2, CY + 2, HZ + 4, MAT.Rock, ROCK, "Wall")
+			U(X1, FY, Z1 - 2, X2, CY + 2, Z1, MAT.Rock, ROCK, "Wall")
+			U(X1, FY, Z2, X2, CY + 2, Z2 + 2, MAT.Rock, ROCK, "Wall")
+			U(X1, CY, Z1, HX - 8, CY + 2, Z2, MAT.Rock, DEEP, "Ceiling")
+			U(HX + 8, CY, Z1, X2, CY + 2, Z2, MAT.Rock, DEEP, "Ceiling")
+			U(HX - 8, CY, Z1, HX + 8, CY + 2, HZ - 8, MAT.Rock, DEEP, "Ceiling")
+			U(HX - 8, CY, HZ + 8, HX + 8, CY + 2, Z2, MAT.Rock, DEEP, "Ceiling")
+			-- the hole's shaft, capped above (no sky); the glow on the heap is the light below
+			for _, w in ipairs({ { -8, -8, -7, 8 }, { 7, -8, 8, 8 }, { -8, -8, 8, -7 }, { -8, 7, 8, 8 } }) do
+				U(HX + w[1], CY, HZ + w[2], HX + w[3], CY + 40, HZ + w[4], MAT.Rock, DEEP, "Shaft")
+			end
+			U(HX - 8, CY + 40, HZ - 8, HX + 8, CY + 41, HZ + 8, MAT.Rock, DEEP, "ShaftCap")
+			local rain = ghost(HX, CY, HZ, 14, 1, 14)
+			local ember = Instance.new("ParticleEmitter")
+			ember.EmissionDirection = Enum.NormalId.Bottom
+			ember.Color = ColorSequence.new(EMBER)
+			ember.LightEmission = 1
+			ember.Size = NumberSequence.new(0.3, 0)
+			ember.Lifetime = NumberRange.new(3, 5)
+			ember.Rate = 8
+			ember.Speed = NumberRange.new(2, 5)
+			ember.Acceleration = Vector3.new(0, -7, 0)
+			ember.Parent = rain
+			lit(rain, Color3.fromRGB(255, 110, 40), 55, 1.5, true)
+			pile(HX, HZ, 7, 22, 5)
+			pile(116, 14, 4, 6, 3) -- (and older falls in the corners)
+			pile(116, -24, 3, 5, 2.5)
+			column(146, HZ - 10, CY)
+			column(160, HZ - 10, CY)
+			column(146, HZ + 10, CY)
+			column(160, HZ + 10, CY, true)
+			-- jagged ceiling teeth (short: clear of a standing head) and rock heaved out of the walls
+			for _ = 1, 22 do
+				local x, z, s = R(X1 + 3, X2 - 3), R(Z1 + 3, Z2 - 3), R(1.5, 4.5)
+				if math.abs(x - HX) > 11 or math.abs(z - HZ) > 11 then
+					local h = s * R(1, 2.2)
+					tilt(part({ Name = "Tooth", Size = Vector3.new(s, h, s * R(0.8, 1.3)), CFrame = CFrame.new(x, CY - h / 2 + 0.5, z), Material = MAT.Rock, Color = dark(), Parent = under }), 0.2)
+				end
+			end
+			for _ = 1, 34 do
+				local w, h, d = R(3, 8), R(4, 12), R(1.2, 3)
+				local y = ur:NextNumber() < 0.5 and CY - h / 2 + 1 or FY + h / 2 - 1
+				local side, along = ur:NextInteger(1, 4), R(0, 1)
+				local c
+				if side == 1 then
+					c = CFrame.new(X1 + 5 + along * (X2 - X1 - 10), y, Z1 + d / 2 - 0.5)
+				elseif side == 2 then
+					c = CFrame.new(X1 + 5 + along * (X2 - X1 - 10), y, Z2 - d / 2 + 0.5)
+				elseif side == 3 then
+					c = CFrame.new(X1 + d / 2 - 0.5, y, Z1 + 5 + along * (Z2 - Z1 - 10)) * CFrame.Angles(0, math.pi / 2, 0)
+				else
+					c = CFrame.new(X2 - d / 2 + 0.5, y, Z1 + 5 + along * (Z2 - Z1 - 10)) * CFrame.Angles(0, math.pi / 2, 0)
+				end
+				if side ~= 4 or math.abs(c.Z - HZ) > 8 then -- (the door stays clear)
+					part({ Name = "CaveRock", Size = Vector3.new(w, h, d), CFrame = c * CFrame.Angles(R(-0.12, 0.12), R(-0.2, 0.2), R(-0.12, 0.12)), Material = MAT.Rock, Color = dark(), Parent = under })
+				end
+			end
+			-- low lava channels along the long walls (terrain, as in the pit), quiet here: only cinders on them, a dull glow
+			for _, z in ipairs({ -22, 12 }) do
+				T:FillBlock(CFrame.new(154, FY - 0.65, z), Vector3.new(28, 2.7, 6), MAT.CrackedLava) -- (y -112..-109.3: its voxel row part-full, so the surface stands ~0.7 above the floor)
+				local function edge(x, zz)
+					local s = R(1.2, 2.4)
+					tilt(part({ Name = "LavaEdge", Size = Vector3.new(s * R(1, 1.6), s * R(0.6, 1), s), CFrame = CFrame.new(x, FY + s * 0.3, zz), Material = MAT.Basalt, Color = dark(), Parent = under }), 0.35)
+				end
+				for x = 140, 168, 2.2 do
+					edge(x + R(-0.4, 0.4), z - 3.5 - R(-0.3, 0.4))
+					edge(x + R(-0.4, 0.4), z + 3.5 + R(-0.3, 0.4))
+				end
+				for zz = z - 2, z + 2, 2 do
+					edge(139 + R(-0.3, 0.3), zz)
+					edge(169 + R(-0.3, 0.3), zz)
+				end
+				table.insert(later, function()
+					for _ = 1, 14 do
+						local hit = workspace:Raycast(Vector3.new(R(141, 167), FY + 10, z + R(-2.5, 2.5)), Vector3.new(0, -16, 0), onlyTerrain)
+						if hit then
+							strew(hit, 0)
+						end
+					end
+				end)
+				lit(ghost(147, FY + 2, z), EMBER, 24, 0.8)
+				lit(ghost(161, FY + 2, z), EMBER, 24, 0.8)
+			end
+			for _, b in ipairs({ { 146, Z1 + 1.8 }, { 162, Z1 + 1.8 }, { 146, Z2 - 1.8 }, { 162, Z2 - 1.8 }, { X2 - 1.8, HZ - 9 }, { X2 - 1.8, HZ + 9 } }) do
+				brazier(b[1], b[2], 7, 1)
+			end
+
+			-- sunk lava, the moat's way: terrain lava and crust with its surface near y -115, five below the floor (too deep to
+			-- climb out of: it takes you, init.server), lit far brighter than it looks, heat and sparks off it. x1..x2, z1..z2 on
+			-- the 4-stud grid; each one's box goes in deadly (info.Underfire.Moats). fierce (the gutters): little crust, fire of
+			-- every size and heat bunched and overlapping along it, tongues of flame off all of it, thick sparks, and a jagged rim
+			-- of shards leaning out over both edges - plainly death. clear: a stretch {from, to} along it the rim leaves open
+			-- (where a bridge crosses)
+			local deadly = {}
+			local function sunk(x1, z1, x2, z2, fierce, clear)
+				local reg = Region3.new(Vector3.new(x1, -124, z1), Vector3.new(x2, -116, z2)):ExpandToGrid(4)
+				local mats, occ = T:ReadVoxels(reg, 4)
+				for i = 1, #mats do
+					for j = 1, #mats[i] do
+						for k = 1, #mats[i][j] do
+							mats[i][j][k] = ur:NextNumber() < (fierce and 0.9 or 0.55) and MAT.CrackedLava or MAT.Basalt
+							occ[i][j][k] = j == 1 and 1 or 0.7
+						end
+					end
+				end
+				T:WriteVoxels(reg, 4, mats, occ)
+				local alongX = x2 - x1 >= z2 - z1
+				local len = alongX and x2 - x1 or z2 - z1
+				local cx, cz = (x1 + x2) / 2, (z1 + z2) / 2
+				local function at(d)
+					return alongX and x1 + d or cx, alongX and cz or z1 + d
+				end
+				for d = 4, math.max(len - 4, 4), 10 do
+					local x, z = at(d)
+					lit(ghost(x, FY - 1, z), Color3.fromRGB(255, 96, 36), 40, fierce and 3 or 2.4)
+				end
+				if fierce then
+					local across = (alongX and z2 - z1 or x2 - x1) / 2
+					local function spot(d, o) -- d along it, o across from its centre line
+						if alongX then
+							return x1 + d, cz + o
+						end
+						return cx + o, z1 + d
+					end
+					local d = R(0.5, 3)
+					while d < len - 0.5 do -- (bunches of one or two, at no set spacing, anywhere across it)
+						for _ = 1, ur:NextInteger(1, 2) do
+							local x, z = spot(d + R(-1.5, 1.5), R(0.6 - across, across - 0.6))
+							local f = Instance.new("Fire")
+							f.Size, f.Heat = R(3, 12), R(3, 18)
+							f.Color = Color3.fromRGB(255, 110, 30):Lerp(Color3.fromRGB(255, 60, 15), ur:NextNumber())
+							f.SecondaryColor = Color3.fromRGB(110, 14, 8):Lerp(Color3.fromRGB(60, 8, 4), ur:NextNumber())
+							f.Parent = ghost(x, FY - R(2.5, 4.5), z)
+						end
+						d += R(3, 9)
+					end
+					local tongues = Instance.new("ParticleEmitter")
+					tongues.Texture = "rbxasset://textures/particles/fire_main.dds"
+					tongues.Color = ColorSequence.new(Color3.fromRGB(255, 140, 50), Color3.fromRGB(200, 40, 10))
+					tongues.LightEmission = 1
+					tongues.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.5, 1), NumberSequenceKeypoint.new(0.4, 3, 2), NumberSequenceKeypoint.new(1, 0.5, 0.5) })
+					tongues.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(0.3, 0.2), NumberSequenceKeypoint.new(1, 1) })
+					tongues.Lifetime = NumberRange.new(0.5, 1.3)
+					tongues.Speed = NumberRange.new(4, 11)
+					tongues.SpreadAngle = Vector2.new(8, 8)
+					tongues.Rotation = NumberRange.new(0, 360)
+					tongues.RotSpeed = NumberRange.new(-40, 40)
+					tongues.Rate = (x2 - x1) * (z2 - z1) / 6
+					tongues.Parent = ghost(cx, FY - 4, cz, math.max(x2 - x1 - 1, 1), 1, math.max(z2 - z1 - 1, 1))
+					for _, side in ipairs({ -1, 1 }) do -- the rim: shards leaning in over the lava from both edges
+						local e = R(0, 1.5)
+						while e < len do
+							if not (clear and e > clear[1] and e < clear[2]) then
+								local h, w = R(1, 3.5), R(0.7, 1.8)
+								local x, z = spot(e, side * (across - R(-0.4, 0.5)))
+								local lean = alongX and CFrame.Angles(-side * R(0.25, 0.6), 0, 0) or CFrame.Angles(0, 0, side * R(0.25, 0.6))
+								part({ Name = "RimShard", Size = Vector3.new(w, h, w * R(0.6, 1.2)), CFrame = CFrame.new(x, FY - 0.6, z) * lean * CFrame.Angles(0, R(0, 6.28), 0) * CFrame.new(0, h / 2, 0), Material = ur:NextNumber() < 0.6 and MAT.Basalt or MAT.Slate, Color = dark(), Parent = under })
+							end
+							e += R(1, 2.6)
+						end
+					end
+				end
+				local heat = drift:Clone()
+				heat.Parent = ghost(cx, FY - 1, cz, math.max(x2 - x1 - 4, 1), 1, math.max(z2 - z1 - 4, 1))
+				local motes = sparks:Clone()
+				motes.Rate = math.max(2, len / (fierce and 2 or 8))
+				motes.SpreadAngle = Vector2.new(10, 10)
+				motes.Parent = heat.Parent
+				table.insert(deadly, { MinX = x1, MaxX = x2, MinZ = z1, MaxZ = z2, MaxY = FY + 1.5 })
+			end
+			local function merlons(x1, x2, z, y)
+				for x = x1 + 0.8, x2 - 0.8, 3.2 do
+					U(x - 0.8, y, z, x + 0.8, y + 2.2, z + 1.4, MAT.Basalt, DEEP, "Merlon")
+				end
+			end
+
+			-- AROUND THE CORNER: no hallway but a winding gallery of the fortress, the same dark basalt, columns, buttresses and
+			-- sunk lava: east from the door along a lava gutter and a colonnade, round the end of a battlemented wall (a squat
+			-- tower on its end), back west along a second gutter at its foot, and south through the hall's mouth (x 180..196).
+			-- Inside x 174..224, z -18..30, ceiling y -84; the wall between the two runs is x 174..208, z 2..12, open above.
+			local GT = FY + 26
+			T:FillBlock(CFrame.new(199, -88, 6), Vector3.new(58, 60, 56), Enum.Material.Air)
+			-- the floor, round the gutters (z -18..-14 along the first run, x 176..220; z 12..16 at the wall's foot, x 180..204)
+			U(172, FY - 2, -14, 226, FY, 12, MAT.Slate, DEEP, "Floor")
+			U(172, FY - 2, -18, 176, FY, -14, MAT.Slate, DEEP, "Floor")
+			U(220, FY - 2, -18, 226, FY, -14, MAT.Slate, DEEP, "Floor")
+			U(172, FY - 2, 12, 180, FY, 16, MAT.Slate, DEEP, "Floor")
+			U(204, FY - 2, 12, 226, FY, 16, MAT.Slate, DEEP, "Floor")
+			U(172, FY - 2, 16, 226, FY, 30, MAT.Slate, DEEP, "Floor")
+			-- outer walls (the north one down past the gutter's depth), the block west of the second run, the ceiling
+			U(172, FY - 10, -20, 226, GT + 2, -18, MAT.Rock, ROCK, "Wall")
+			U(224, FY, -18, 226, GT + 2, 30, MAT.Rock, ROCK, "Wall")
+			U(174, FY, 12, 180, GT + 2, 30, MAT.Rock, ROCK, "Wall")
+			U(172, GT, -20, 226, GT + 2, 30, MAT.Rock, DEEP, "Ceiling")
+			for x = 182, 218, 12 do -- buttresses rising out of the gutter, and down the east wall
+				U(x - 1.5, FY - 8, -18, x + 1.5, GT, -16.6, MAT.Basalt, DEEP, "Buttress")
+			end
+			for z = -6, 26, 16 do
+				U(222.4, FY, z - 1.5, 224, GT, z + 1.5, MAT.Basalt, DEEP, "Buttress")
+			end
+			-- the gutters: beds, banks, ends, lava
+			U(176, FY - 10, -18, 220, FY - 8, -14, MAT.Basalt, DEEP, "MoatBed")
+			U(176, FY - 8, -14, 220, FY, -13, MAT.Basalt, DEEP, "MoatBank")
+			U(175, FY - 8, -18, 176, FY, -14, MAT.Basalt, DEEP, "MoatBank")
+			U(220, FY - 8, -18, 221, FY, -14, MAT.Basalt, DEEP, "MoatBank")
+			sunk(176, -20, 220, -12, true)
+			U(180, FY - 10, 12, 204, FY - 8, 16, MAT.Basalt, DEEP, "MoatBed")
+			U(180, FY - 8, 11, 204, FY, 12, MAT.Basalt, DEEP, "MoatBank")
+			U(180, FY - 8, 16, 204, FY, 17, MAT.Basalt, DEEP, "MoatBank")
+			U(179, FY - 8, 12, 180, FY, 16, MAT.Basalt, DEEP, "MoatBank")
+			U(204, FY - 8, 12, 205, FY, 16, MAT.Basalt, DEEP, "MoatBank")
+			sunk(180, 12, 204, 16, true)
+			-- the wall between the runs, battlemented both sides, a squat tower on its end
+			U(174, FY, 2, 200, FY + 16, 12, MAT.Basalt, ROCK, "Curtain")
+			merlons(174, 200, 2, FY + 16)
+			merlons(174, 200, 10.6, FY + 16)
+			U(200, FY, 1, 208, FY + 22, 13, MAT.Basalt, ROCK, "Tower")
+			merlons(200, 208, 1, FY + 22)
+			merlons(200, 208, 11.6, FY + 22)
+			U(203.7, FY + 12, 0.9, 204.3, FY + 17, 1, MAT.SmoothPlastic, Color3.fromRGB(4, 3, 3), "ArrowSlit")
+			-- a colonnade along the first gutter; two more columns by the hall's mouth; braziers at the turns
+			for _, x in ipairs({ 184, 196, 208 }) do
+				column(x, -11, GT)
+			end
+			column(206, 26, GT)
+			column(216, 26, GT)
+			for _, b in ipairs({ { 178, -11 }, { 221, -11 }, { 221, 8 }, { 221, 27 }, { 183, 27 } }) do
+				brazier(b[1], b[2], 9, 1.4, 5)
+			end
+			for _ = 1, 12 do
+				local x, z, s = R(176, 222), R(-16, 28), R(2, 4.5)
+				local h = s * R(1, 2.2)
+				tilt(part({ Name = "Tooth", Size = Vector3.new(s, h, s * R(0.8, 1.3)), CFrame = CFrame.new(x, GT - h / 2 + 0.5, z), Material = MAT.Rock, Color = dark(), Parent = under }), 0.2)
+			end
+
+			-- THE FORTRESS HALL: x 164..232, z 32..96, ceiling y -74. Columns either side of the way in, a moat of dull lava
+			-- across the hall (half of it crusted over, yet throwing far more light than it looks like it should), one bridge,
+			-- and beyond it a battlemented wall with two towers and a gate, its portcullis half down, choked with fallen rock
+			local AX1, AX2, AZ1, AZ2, TOP = 164, 232, 32, 96, FY + 36
+			local MZ1, MZ2 = 54, 68 -- the moat
+			U(AX1 - 2, FY - 2, AZ1 - 2, AX2 + 2, FY, MZ1, MAT.Slate, DEEP, "Floor")
+			U(AX1 - 2, FY - 2, MZ2, AX2 + 2, FY, AZ2 + 2, MAT.Slate, DEEP, "Floor")
+			U(AX1 - 2, FY, AZ1 - 2, 180, TOP + 2, AZ1, MAT.Rock, ROCK, "Wall") -- (round its mouth from the gallery: x 180..196, 18 high)
+			U(196, FY, AZ1 - 2, AX2 + 2, TOP + 2, AZ1, MAT.Rock, ROCK, "Wall")
+			U(180, FY + 18, AZ1 - 2, 196, TOP + 2, AZ1, MAT.Rock, ROCK, "Wall")
+			U(AX1 - 2, FY, AZ1, AX1, TOP + 2, 38, MAT.Rock, ROCK, "Wall") -- (round the door west: z 38..48, 16 high)
+			U(AX1 - 2, FY, 48, AX1, TOP + 2, AZ2 + 2, MAT.Rock, ROCK, "Wall")
+			U(AX1 - 2, FY + 16, 38, AX1, TOP + 2, 48, MAT.Rock, ROCK, "Wall")
+			U(AX2, FY, AZ1, AX2 + 2, TOP + 2, 70, MAT.Rock, ROCK, "Wall") -- (round the door east, off the courtyard: z 70..84, 20 high)
+			U(AX2, FY, 84, AX2 + 2, TOP + 2, AZ2 + 2, MAT.Rock, ROCK, "Wall")
+			U(AX2, FY + 20, 70, AX2 + 2, TOP + 2, 84, MAT.Rock, ROCK, "Wall")
+			U(AX1, FY, AZ2, AX2, TOP + 2, AZ2 + 2, MAT.Rock, ROCK, "Wall")
+			U(AX1, TOP, AZ1, AX2, TOP + 2, AZ2, MAT.Rock, DEEP, "Ceiling")
+			for z = AZ1 + 8, AZ2 - 4, 12 do -- buttresses up the side walls (not across the doors)
+				if z < 36 or z > 50 then
+					U(AX1, FY, z - 1.5, AX1 + 2, TOP, z + 1.5, MAT.Basalt, DEEP, "Buttress")
+				end
+				if z < 70 or z > 86 then
+					U(AX2 - 2, FY, z - 1.5, AX2, TOP, z + 1.5, MAT.Basalt, DEEP, "Buttress")
+				end
+			end
+			for _ = 1, 18 do
+				local x, z, s = R(AX1 + 3, AX2 - 3), R(AZ1 + 3, AZ2 - 3), R(2, 5)
+				local h = s * R(1, 2.4)
+				tilt(part({ Name = "Tooth", Size = Vector3.new(s, h, s * R(0.8, 1.3)), CFrame = CFrame.new(x, TOP - h / 2 + 0.5, z), Material = MAT.Rock, Color = dark(), Parent = under }), 0.2)
+			end
+			column(179, 40, TOP)
+			column(197, 40, TOP)
+			column(179, 49, TOP)
+			column(197, 49, TOP)
+			brazier(170, 38, 10, 1.6, 5)
+			brazier(226, 38, 10, 1.6, 5)
+			-- the moat: banks and a bed of stone, lava (terrain) sunk in it, mottled with dark crust
+			U(AX1, FY - 8, MZ1 - 1, AX2, FY, MZ1, MAT.Basalt, DEEP, "MoatBank")
+			U(AX1, FY - 8, MZ2, AX2, FY, MZ2 + 1, MAT.Basalt, DEEP, "MoatBank")
+			U(AX1, FY - 10, MZ1, AX2, FY - 8, MZ2, MAT.Basalt, DEEP, "MoatBed")
+			sunk(AX1, MZ1 - 2, AX2, MZ2)
+			-- the bridge, on one pier, with low parapets
+			U(184, FY - 1.5, MZ1 - 2, 192, FY, MZ2 + 2, MAT.Basalt, ROCK, "Bridge")
+			U(185, FY - 8, 59, 191, FY - 1.5, 63, MAT.Basalt, DEEP, "BridgePier")
+			U(183, FY - 1.5, MZ1 - 2, 184, FY + 2.5, MZ2 + 2, MAT.Basalt, DEEP, "Parapet")
+			U(192, FY - 1.5, MZ1 - 2, 193, FY + 2.5, MZ2 + 2, MAT.Basalt, DEEP, "Parapet")
+			-- the wall beyond: curtain, two towers, battlements, the gate between
+			U(AX1, FY, 84, 172, FY + 18, 88, MAT.Basalt, ROCK, "Curtain")
+			U(204, FY, 84, AX2, FY + 18, 88, MAT.Basalt, ROCK, "Curtain")
+			merlons(AX1, 172, 84, FY + 18)
+			merlons(204, AX2, 84, FY + 18)
+			for _, x1 in ipairs({ 172, 194 }) do
+				U(x1, FY, 80, x1 + 10, FY + 26, 90, MAT.Basalt, ROCK, "Tower")
+				merlons(x1, x1 + 10, 80, FY + 26)
+				U(x1 + 4.7, FY + 14, 79.9, x1 + 5.3, FY + 19, 80, MAT.SmoothPlastic, Color3.fromRGB(4, 3, 3), "ArrowSlit")
+			end
+			U(182, FY + 14, 84, 194, FY + 18, 88, MAT.Basalt, DEEP, "GateLintel")
+			merlons(182, 194, 84, FY + 18)
+			for x = 183, 193, 2 do
+				U(x - 0.2, FY + 7, 85.8, x + 0.2, FY + 14, 86.2, MAT.Metal, Color3.fromRGB(30, 28, 28), "Portcullis")
+			end
+			for _, y in ipairs({ FY + 8, FY + 11 }) do
+				U(182.5, y, 85.8, 193.5, y + 0.4, 86.2, MAT.Metal, Color3.fromRGB(30, 28, 28), "Portcullis")
+			end
+			pile(188, 92, 4, 14, 4.5) -- (the gate's passage, caved in)
+			brazier(178, 76, 9, 1.4, 5)
+			brazier(198, 76, 9, 1.4, 5)
+
+			task.spawn(function()
+				for _ = 1, 50 do -- (until a ray finds the pit's floor; 10 s at most)
+					if workspace:Raycast(Vector3.new(PX, 10, PZ), Vector3.new(0, -80, 0), onlyTerrain) then
+						break
+					end
+					task.wait(0.2)
+				end
+				for _, f in ipairs(later) do
+					f()
+				end
+			end)
+			info.Underfire = {
+				Gate = { MinX = 86, MaxX = 88.8, MinZ = -36.5, MaxZ = -27.5 }, -- (the breach's inner lip)
+				Pit = Vector3.new(PX, PY, PZ),
+				Landing = CFrame.lookAt(Vector3.new(141, FY + 3.2, HZ), Vector3.new(170, FY + 3.2, HZ)),
+				Zone = { Name = "Maw of Pyralis", MinX = X1 - 4, MaxX = X2 + 4, MinZ = Z1 - 4, MaxZ = Z2 + 4, MinY = FY - 10, MaxY = CY + 45 },
+				Moats = deadly, -- (down in the lava: it takes you, as the chasm does)
+			}
+			table.insert(info.Zones, 1, info.Underfire.Zone)
+			-- the Cinder Knights (Characters/Cinder.lua) keeping the fortress, all the way to the arena's gate (none in it)
+			for _, k in ipairs({
+				{ 164, 8, 141, -5 }, -- the room: by its east door, toward the landing
+				{ 214, -10, 190, -10 }, -- the gallery's first run
+				{ 200, 22, 220, 22 }, -- its second run, at the wall's foot
+				{ 198, 78, 198, 60 }, -- the hall, past the bridge
+				{ 141, 70, 141, 44 }, -- the way west
+				{ 130, 114, 140, 96 }, -- the side chamber, by its chest
+				{ 262, 78, 240, 78 }, -- the way east
+				{ 270, 110, 270, 92 }, -- its last stretch, before the arena
+			}) do
+				table.insert(info.EnemySpawns, { Type = "Cinder", CFrame = CFrame.lookAt(Vector3.new(k[1], FY + 3.2, k[2]), Vector3.new(k[3], FY + 3.2, k[4])) })
+			end
+			table.insert(info.Zones, 1, { Name = "Maw of Pyralis", MinX = X2, MaxX = AX2 + 4, MinZ = -24, MaxZ = AZ2 + 4, MinY = FY - 12, MaxY = TOP + 4 }) -- (the gallery and the fortress hall)
+			-- THE BRANCHES off the fortress hall, the same fortress all through: west to a side chamber with a lava pit, and east
+			-- by a great way to the arena. Their ground is cut away first (clear of the hall's moat, x 164..232).
+			local PH = FY + 18 -- the passages' ceiling
+			T:FillBlock(CFrame.new(140, -91, 79), Vector3.new(44, 62, 90), Enum.Material.Air) -- (x 118..162, z 34..124)
+			local function teeth(x1, z1, x2, z2, top, n)
+				for _ = 1, n do
+					local s = R(1.5, 4)
+					local h = s * R(1, 2.2)
+					tilt(part({ Name = "Tooth", Size = Vector3.new(s, h, s * R(0.8, 1.3)), CFrame = CFrame.new(R(x1, x2), top - h / 2 + 0.5, R(z1, z2)), Material = MAT.Rock, Color = dark(), Parent = under }), 0.2)
+				end
+			end
+
+			-- THE WAY WEST: through the hall's west wall (door z 38..48), west, then south into a side chamber
+			-- (x 124..156, z 92..120) of four columns round a pit of lava
+			U(134, FY - 2, 36, 162, FY, 92, MAT.Slate, DEEP, "Floor")
+			U(134, PH, 36, 162, PH + 2, 92, MAT.Rock, DEEP, "Ceiling")
+			U(134, FY, 36, 162, PH, 38, MAT.Rock, ROCK, "Wall")
+			U(146, FY, 48, 162, PH, 50, MAT.Rock, ROCK, "Wall")
+			U(134, FY, 38, 136, PH, 90, MAT.Rock, ROCK, "Wall")
+			U(146, FY, 50, 148, PH, 90, MAT.Rock, ROCK, "Wall")
+			for z = 60, 84, 12 do
+				U(136, FY, z - 1.5, 137.4, PH, z + 1.5, MAT.Basalt, DEEP, "Buttress")
+				U(144.6, FY, z - 1.5, 146, PH, z + 1.5, MAT.Basalt, DEEP, "Buttress")
+			end
+			brazier(139, 41, 8, 1.2, 5)
+			teeth(137, 39, 160, 47, PH, 6)
+			teeth(137, 50, 145, 88, PH, 6)
+			local CH = FY + 24
+			U(122, FY, 90, 136, CH, 92, MAT.Rock, ROCK, "Wall")
+			U(146, FY, 90, 158, CH, 92, MAT.Rock, ROCK, "Wall")
+			U(136, PH, 90, 146, CH, 92, MAT.Rock, ROCK, "Wall")
+			U(122, FY, 120, 158, CH, 122, MAT.Rock, ROCK, "Wall")
+			U(122, FY, 92, 124, CH, 120, MAT.Rock, ROCK, "Wall")
+			U(156, FY, 92, 158, CH, 120, MAT.Rock, ROCK, "Wall")
+			U(122, CH, 90, 158, CH + 2, 122, MAT.Rock, DEEP, "Ceiling")
+			U(122, FY - 2, 92, 158, FY, 104, MAT.Slate, DEEP, "Floor") -- (round the pit: x 136..144, z 104..108)
+			U(122, FY - 2, 108, 158, FY, 122, MAT.Slate, DEEP, "Floor")
+			U(122, FY - 2, 104, 136, FY, 108, MAT.Slate, DEEP, "Floor")
+			U(144, FY - 2, 104, 158, FY, 108, MAT.Slate, DEEP, "Floor")
+			U(136, FY - 10, 104, 144, FY - 8, 108, MAT.Basalt, DEEP, "MoatBed")
+			U(135, FY - 8, 103, 145, FY, 104, MAT.Basalt, DEEP, "MoatBank")
+			U(135, FY - 8, 108, 145, FY, 109, MAT.Basalt, DEEP, "MoatBank")
+			U(135, FY - 8, 104, 136, FY, 108, MAT.Basalt, DEEP, "MoatBank")
+			U(144, FY - 8, 104, 145, FY, 108, MAT.Basalt, DEEP, "MoatBank")
+			sunk(136, 104, 144, 108, true)
+			column(130, 98, CH)
+			column(150, 98, CH)
+			column(130, 114, CH)
+			column(150, 114, CH, true)
+			brazier(125.8, 106, 8, 1.2, 5)
+			brazier(154.2, 106, 8, 1.2, 5)
+			pile(127, 117, 3, 5, 2.5)
+			teeth(125, 93, 155, 119, CH, 8)
+			do -- THE BLAZING CHEST, against the side chamber's south wall facing the way in: iron-bound, ember-cracked, burning
+				-- (opened as the mushroom huts' are, init.server: the Armor of a Lion Hunter inside). No R(): the room's stream stays put
+				local cf = CFrame.lookAt(Vector3.new(140, FY, 117), Vector3.new(140, FY, 100))
+				local iron, char = Color3.fromRGB(40, 36, 34), Color3.fromRGB(34, 22, 18)
+				part({ Name = "BlazeChest", Size = Vector3.new(4, 2.2, 2.4), CFrame = cf * CFrame.new(0, 1.1, 0), Material = MAT.CrackedLava, Color = char, Parent = under })
+				for _, x in ipairs({ -1.5, 0, 1.5 }) do
+					part({ Name = "BlazeChestBand", Size = Vector3.new(0.3, 2.3, 2.5), CFrame = cf * CFrame.new(x, 1.1, 0), Material = MAT.Metal, Color = iron, CanCollide = false, Parent = under })
+				end
+				part({ Name = "BlazeChestLock", Size = Vector3.new(0.5, 0.55, 0.12), CFrame = cf * CFrame.new(0, 1.8, -1.25), Material = MAT.Metal, Color = Color3.fromRGB(196, 150, 70), CanCollide = false, Parent = under })
+				local lid = part({ Name = "BlazeChestLid", Size = Vector3.new(4.05, 0.45, 2.45), CFrame = cf * CFrame.new(0, 2.42, 0), Material = MAT.CrackedLava, Color = char, Parent = under })
+				lit(blaze(140, FY + 3.4, 117, 4), EMBER, 22, 1.6)
+				info.MushroomChests = info.MushroomChests or {}
+				table.insert(info.MushroomChests, { Lid = lid, Hinge = cf * CFrame.new(0, 2.65, 1.2), Item = { Attr = "PotbellyArmor", Text = "Armor of a Lion Hunter. Heavy iron, and something on its back that was never meant for a man. Press T to choose weapons and armor." }, Prompt = prompt(lid, "Open", "Blazing Chest", 0.5, 7) })
+			end
+
+			do -- (its own scope: the build function holds a great many locals already)
+				-- THE WAY EAST to the arena: wide and high, the fortress at its grandest. East from the hall's courtyard (its door z
+				-- 70..84) between two fierce lava gutters and colonnades, then south the same way to the arena's north gate.
+				-- Inside x 234..284, z 64..92, then x 256..284, z 92..120; ceiling y -80
+				local EH = FY + 30
+				local IRON = Color3.fromRGB(34, 30, 28)
+				local function banner(x, z, alongX, top) -- dark, tattered, on an iron rod, flat to a wall
+					local cf = CFrame.new(x, top - 8, z) * (alongX and CFrame.identity or CFrame.Angles(0, math.pi / 2, 0))
+					part({ Name = "BannerRod", Size = Vector3.new(5.4, 0.3, 0.3), CFrame = cf * CFrame.new(0, 6.1, 0), Material = MAT.Metal, Color = IRON, Parent = under })
+					part({ Name = "Banner", Size = Vector3.new(4.5, 12, 0.2), CFrame = cf, Material = MAT.Fabric, Color = Color3.fromRGB(52, 14, 14), CanCollide = false, Parent = under })
+					part({ Name = "Banner", Size = Vector3.new(2.2, 3, 0.2), CFrame = cf * CFrame.new(R(-1, 1), -7.2, 0) * CFrame.Angles(0, 0, R(-0.2, 0.2)), Material = MAT.Fabric, Color = Color3.fromRGB(44, 12, 12), CanCollide = false, Parent = under })
+				end
+				local function chain(x, z, top, len, cage) -- hung from the ceiling, some with an iron cage on the end
+					part({ Name = "Chain", Size = Vector3.new(0.3, len, 0.3), CFrame = CFrame.new(x, top - len / 2, z), Material = MAT.Metal, Color = IRON, CanCollide = false, Parent = under })
+					if cage then
+						local y = top - len - 2.5
+						for _, o in ipairs({ { -1.2, -1.2 }, { 1.2, -1.2 }, { -1.2, 1.2 }, { 1.2, 1.2 } }) do
+							part({ Name = "Cage", Size = Vector3.new(0.2, 5, 0.2), CFrame = CFrame.new(x + o[1], y, z + o[2]), Material = MAT.Metal, Color = IRON, CanCollide = false, Parent = under })
+						end
+						part({ Name = "Cage", Size = Vector3.new(2.8, 0.3, 2.8), CFrame = CFrame.new(x, y + 2.5, z), Material = MAT.Metal, Color = IRON, CanCollide = false, Parent = under })
+						part({ Name = "Cage", Size = Vector3.new(2.8, 0.3, 2.8), CFrame = CFrame.new(x, y - 2.5, z), Material = MAT.Metal, Color = IRON, CanCollide = false, Parent = under })
+					end
+				end
+				-- rock heaved out of a walk's walls, anywhere up them: x1..x2, z1..z2 the walk, sides which of its edges are wall
+				-- ("x1", "x2", "z1", "z2"), keep(x, z) false where none should go
+				local function rough(x1, z1, x2, z2, top, n, sides, keep)
+					for _ = 1, n do
+						local side = sides[ur:NextInteger(1, #sides)]
+						local w, h, d = R(3, 8), R(5, 16), R(1.2, 3)
+						local y = R(FY + h / 2 - 2, top - h / 2)
+						local c
+						if side == "z1" then
+							c = CFrame.new(R(x1 + 3, x2 - 3), y, z1 + d / 2 - 0.5)
+						elseif side == "z2" then
+							c = CFrame.new(R(x1 + 3, x2 - 3), y, z2 - d / 2 + 0.5)
+						elseif side == "x1" then
+							c = CFrame.new(x1 + d / 2 - 0.5, y, R(z1 + 3, z2 - 3)) * CFrame.Angles(0, math.pi / 2, 0)
+						else
+							c = CFrame.new(x2 - d / 2 + 0.5, y, R(z1 + 3, z2 - 3)) * CFrame.Angles(0, math.pi / 2, 0)
+						end
+						if not keep or keep(c.X, c.Z) then
+							part({ Name = "CaveRock", Size = Vector3.new(w, h, d), CFrame = c * CFrame.Angles(R(-0.15, 0.15), R(-0.25, 0.25), R(-0.15, 0.15)), Material = MAT.Rock, Color = dark(), Parent = under })
+						end
+					end
+				end
+				T:FillBlock(CFrame.new(261, -89, 91), Vector3.new(54, 66, 62), Enum.Material.Air) -- (x 234..288, z 60..122: clear of the moat)
+				U(232, FY - 2, 68, 280, FY, 88, MAT.Slate, DEEP, "Floor")
+				U(260, FY - 2, 88, 280, FY, 120, MAT.Slate, DEEP, "Floor")
+				U(232, FY - 2, 64, 236, FY, 68, MAT.Slate, DEEP, "Floor")
+				U(232, FY - 2, 88, 236, FY, 92, MAT.Slate, DEEP, "Floor")
+				U(232, FY - 8, 64, 236, FY - 2, 92, MAT.Basalt, DEEP, "MoatBank")
+				U(236, FY - 8, 68, 280, FY - 2, 88, MAT.Basalt, DEEP, "MoatBank") -- (the walk's sides, down into the lava)
+				U(260, FY - 8, 88, 280, FY - 2, 120, MAT.Basalt, DEEP, "MoatBank")
+				U(232, FY - 10, 62, 286, FY - 8, 120, MAT.Basalt, DEEP, "MoatBed")
+				U(232, FY - 10, 62, 286, EH + 2, 64, MAT.Rock, ROCK, "Wall")
+				U(284, FY - 10, 64, 286, EH + 2, 120, MAT.Rock, ROCK, "Wall")
+				U(232, FY - 10, 92, 256, EH + 2, 94, MAT.Rock, ROCK, "Wall")
+				U(254, FY - 10, 94, 256, EH + 2, 120, MAT.Rock, ROCK, "Wall")
+				U(232, EH, 62, 286, EH + 2, 120, MAT.Rock, DEEP, "Ceiling")
+				sunk(236, 64, 284, 68, true)
+				sunk(236, 88, 256, 92, true)
+				sunk(256, 88, 260, 120, true)
+				sunk(280, 68, 284, 120, true)
+				for _, x in ipairs({ 246, 258, 270 }) do
+					column(x, 71, EH)
+					if x ~= 270 then -- (not at x 270: that one stood in the middle of the turn south)
+						column(x, 85, EH)
+					end
+				end
+				for _, z in ipairs({ 98, 110 }) do
+					column(263, z, EH)
+					column(277, z, EH)
+				end
+				for x = 242, 278, 12 do
+					U(x - 1.5, FY - 8, 64, x + 1.5, EH, 65.4, MAT.Basalt, DEEP, "Buttress")
+					banner(x + 6, 64.3, true, EH)
+				end
+				for z = 76, 112, 12 do
+					U(282.6, FY - 8, z - 1.5, 284, EH, z + 1.5, MAT.Basalt, DEEP, "Buttress")
+					banner(283.7, z + 6, false, EH)
+				end
+				banner(244, 91.7, true, EH)
+				banner(256.3, 104, false, EH)
+				brazier(240, 72, 10, 1.4, 6)
+				brazier(240, 84, 10, 1.4, 6)
+				brazier(276, 80, 10, 1.4, 6)
+				brazier(262, 115, 12, 1.6, 6)
+				brazier(278, 115, 12, 1.6, 6)
+				chain(252, 78, EH, 12)
+				chain(264, 78, EH, 10, true)
+				chain(270, 101, EH, 14)
+				chain(270, 108, EH, 9, true)
+				teeth(236, 66, 282, 90, EH, 10)
+				teeth(258, 92, 282, 118, EH, 6)
+				rough(234, 64, 284, 92, EH, 16, { "z1" })
+				rough(234, 64, 284, 120, EH, 16, { "x2" })
+				rough(234, 64, 256, 92, EH, 6, { "z2" })
+				rough(256, 92, 284, 120, EH, 8, { "x1" })
+
+				-- THE ARENA, where the way east ends: x 200..312, z 120..232 inside, ceiling y -54. The floor an island
+				-- (x 208..304, z 128..224) in a fierce gutter of lava all round the edge, buttresses rising out of it; its pillars
+				-- gather toward the centre - four great ones close in, five further out (one broken). In from the north over a
+				-- slab, under the gate's raised portcullis.
+				local AT = FY + 56
+				local CX, CZ = 256, 176
+				T:FillBlock(CFrame.new(256, -85, 176), Vector3.new(120, 74, 120), Enum.Material.Air) -- (x 196..316, z 116..236)
+				U(208, FY - 2, 128, 304, FY, 224, MAT.Slate, DEEP, "Floor")
+				U(208, FY - 8, 128, 304, FY - 2, 224, MAT.Basalt, DEEP, "MoatBank")
+				U(200, FY - 10, 120, 312, FY - 8, 232, MAT.Basalt, DEEP, "MoatBed")
+				U(198, FY - 10, 118, 256, AT + 2, 120, MAT.Rock, ROCK, "Wall")
+				U(284, FY - 10, 118, 314, AT + 2, 120, MAT.Rock, ROCK, "Wall")
+				U(256, FY + 28, 118, 284, AT + 2, 120, MAT.Rock, ROCK, "Wall") -- (over the gate, x 256..284, 28 high)
+				U(260, FY - 10, 118, 280, FY - 2, 120, MAT.Rock, ROCK, "Wall")
+				-- the south wall, open at x 260..284 (28 high) on THE WATCHDOG'S LAIR: a bridge over the gutter into a hole too
+				-- dark to see into - black-walled, unlit, and veiled by layers of murk across its mouth. Inside x 258..286, z 234..316
+				U(198, FY - 10, 232, 260, AT + 2, 234, MAT.Rock, ROCK, "Wall")
+				U(284, FY - 10, 232, 314, AT + 2, 234, MAT.Rock, ROCK, "Wall")
+				U(260, FY + 28, 232, 284, AT + 2, 234, MAT.Rock, ROCK, "Wall")
+				U(260, FY - 10, 232, 284, FY - 2, 234, MAT.Rock, ROCK, "Wall")
+				U(262, FY - 1.5, 224, 282, FY, 234, MAT.Basalt, ROCK, "Bridge")
+				do
+					local VOID = Color3.fromRGB(3, 3, 3)
+					T:FillBlock(CFrame.new(272, FY + 12, 276), Vector3.new(36, 36, 88), Enum.Material.Air) -- (x 254..290, z 232..320)
+					U(258, FY - 2, 234, 286, FY, 316, MAT.SmoothPlastic, VOID, "LairFloor")
+					U(256, FY - 2, 234, 258, FY + 30, 318, MAT.SmoothPlastic, VOID, "LairWall")
+					U(286, FY - 2, 234, 288, FY + 30, 318, MAT.SmoothPlastic, VOID, "LairWall")
+					U(258, FY - 2, 316, 264, FY + 30, 318, MAT.SmoothPlastic, VOID, "LairWall") -- (its back: a doorway at x 264..280,
+					U(280, FY - 2, 316, 286, FY + 30, 318, MAT.SmoothPlastic, VOID, "LairWall") -- 20 high, its door PyralisBulwark's)
+					U(264, FY + 20, 316, 280, FY + 30, 318, MAT.SmoothPlastic, VOID, "LairWall")
+					U(256, FY + 28, 234, 288, FY + 30, 318, MAT.SmoothPlastic, VOID, "LairCeiling")
+					for i, z in ipairs({ 235, 238, 242, 247, 253 }) do -- (each veil darker: past the third nothing shows)
+						part({ Name = "Murk", Size = Vector3.new(28, 30, 0.2), CFrame = CFrame.new(272, FY + 13, z), Material = MAT.SmoothPlastic, Color = VOID, Transparency = 0.5 - i * 0.07, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Parent = under })
+					end
+				end
+				U(198, FY - 10, 120, 200, AT + 2, 232, MAT.Rock, ROCK, "Wall")
+				U(312, FY - 10, 120, 314, AT + 2, 232, MAT.Rock, ROCK, "Wall")
+				U(198, AT, 118, 314, AT + 2, 234, MAT.Rock, DEEP, "Ceiling")
+				U(260, FY - 1.5, 118, 280, FY, 128, MAT.Basalt, ROCK, "Bridge")
+				-- (the portcullis, raised, its teeth under the arch: PyralisBulwark's, so it can come down)
+				merlons(256, 284, 120, FY + 28)
+				sunk(200, 120, 312, 128, true, { 57, 83 }) -- (the rim open where the bridge crosses, x 257..283)
+				sunk(200, 224, 312, 232, true, { 61, 83 }) -- (and where the lair's bridge crosses, x 261..283)
+				sunk(200, 128, 208, 224, true)
+				sunk(304, 128, 312, 224, true)
+				for x = 212, 300, 14 do
+					if x < 252 or x > 288 then -- (the gate stays clear)
+						U(x - 2, FY - 8, 120, x + 2, AT, 122.4, MAT.Basalt, DEEP, "Buttress")
+					end
+					if x < 258 or x > 286 then -- (the lair's mouth stays clear)
+						U(x - 2, FY - 8, 229.6, x + 2, AT, 232, MAT.Basalt, DEEP, "Buttress")
+					end
+					if x + 7 < 256 or x + 7 > 288 then
+						banner(x + 7, 231.7, true, AT - 10)
+					end
+				end
+				for z = 134, 218, 14 do
+					U(200, FY - 8, z - 2, 202.4, AT, z + 2, MAT.Basalt, DEEP, "Buttress")
+					U(309.6, FY - 8, z - 2, 312, AT, z + 2, MAT.Basalt, DEEP, "Buttress")
+					banner(200.3, z + 7, false, AT - 10)
+					banner(311.7, z + 7, false, AT - 10)
+				end
+				local pillars = {} -- ({ x, z, half-width, broken }: the True Watchdog perches on the standing ones, and lands clear of all)
+				for k = 1, 3 do -- great pillars close round the centre, more further out (one broken) - but none on the watchdog's
+					-- side, between the centre and its lair (k 0 of the inner four, k 0 and 1 of the outer five: left out)
+					local a = k / 4 * math.pi * 2 + math.pi / 4
+					column(CX + math.cos(a) * 13, CZ + math.sin(a) * 13, AT, false, 3)
+					table.insert(pillars, { CX + math.cos(a) * 13, CZ + math.sin(a) * 13, 3, false })
+				end
+				for k = 2, 4 do
+					local a = k / 5 * math.pi * 2 + math.rad(18)
+					column(CX + math.cos(a) * 28, CZ + math.sin(a) * 28, AT, k == 2, 2.5)
+					table.insert(pillars, { CX + math.cos(a) * 28, CZ + math.sin(a) * 28, 2.5, k == 2 })
+				end
+				for _, c in ipairs({ { 213, 133 }, { 299, 133 }, { 213, 219 }, { 299, 219 } }) do
+					brazier(c[1], c[2], 12, 1.6, 6)
+				end
+				-- THE TRUE WATCHDOG'S SPIRES: its own perches, out near the island's edge, nothing like the columns - a stack of
+				-- basalt drums twisting as they narrow, split by veins of dark fire, crowned with iron talons hooked inward round a
+				-- scarred slab it crouches on. ({ x, z, base half-width, top y }; their own random stream, so the rest stays put)
+				local spires, sr = {}, Random.new(4242)
+				local IRON, VEIN = Color3.fromRGB(38, 32, 30), Color3.fromRGB(150, 28, 14)
+				for _, c in ipairs({ { 217, 152 }, { 216, 203 }, { 295, 150 }, { 238, 214 } }) do
+					local x, z, H = c[1], c[2], sr:NextNumber(15, 17)
+					local yaw, y = sr:NextNumber(0, 6.28), FY
+					for k = 0, 5 do -- (the drums, each turned further and thinner than the last)
+						local hw, h = 3.2 - k * 0.3, H / 6
+						local cf = CFrame.new(x, y + h / 2, z) * CFrame.Angles(0, yaw + k * 0.32, 0)
+						part({ Name = "Spire", Size = Vector3.new(hw * 2, h + 0.1, hw * 2), CFrame = cf, Material = MAT.Basalt, Color = k % 2 == 0 and ROCK or DEEP, Parent = under })
+						for _, f in ipairs({ 0, math.pi * 0.5 + k, math.pi + k * 0.7 }) do
+							if sr:NextNumber() < 0.6 then
+								part({ Name = "SpireVein", Size = Vector3.new(0.5, h * sr:NextNumber(0.5, 0.95), 0.2), CFrame = cf * CFrame.Angles(0, f, 0) * CFrame.new(sr:NextNumber(-hw * 0.6, hw * 0.6), 0, -hw - 0.05) * CFrame.Angles(0, 0, sr:NextNumber(-0.3, 0.3)), Material = MAT.CrackedLava, Color = VEIN, CanCollide = false, Parent = under })
+							end
+						end
+						y += h
+					end
+					part({ Name = "SpireTop", Size = Vector3.new(5.6, 0.8, 5.6), CFrame = CFrame.new(x, y + 0.3, z) * CFrame.Angles(0, yaw + 2, 0), Material = MAT.Basalt, Color = DEEP, Parent = under })
+					for g = 1, 3 do -- (gouged by its talons)
+						part({ Name = "Gouge", Size = Vector3.new(0.25, 0.1, 3.2), CFrame = CFrame.new(x + (g - 2) * 0.8, y + 0.72, z) * CFrame.Angles(0, yaw + 0.5, 0), Material = MAT.CrackedLava, Color = VEIN, CanCollide = false, Parent = under })
+					end
+					for k = 1, 5 do -- the crown: iron talons rising out of the slab's edge, leaning out, then hooked back in
+						local a = k / 5 * math.pi * 2 + yaw
+						local o, d = Vector3.new(x, y + 0.4, z), Vector3.new(math.cos(a), 0, math.sin(a))
+						local p1, p2, p3 = o + d * 2.5, o + d * 3.6 + Vector3.new(0, 3.4, 0), o + d * 2.6 + Vector3.new(0, 4.8, 0)
+						for _, s in ipairs({ { p1, p2, 0.8 }, { p2, p3, 0.55 } }) do
+							part({ Name = "SpireTalon", Size = Vector3.new(s[3], s[3], (s[2] - s[1]).Magnitude + 0.3), CFrame = CFrame.lookAt((s[1] + s[2]) / 2, s[2]), Material = MAT.Metal, Color = IRON, Parent = under })
+						end
+					end
+					lit(ghost(x, y + 2, z), Color3.fromRGB(170, 25, 10), 18, 1.4)
+					table.insert(spires, { x, z, 3.2, y + 0.7 })
+				end
+				for _ = 1, 8 do
+					local a, r = R(0, 6.28), R(18, 36)
+					chain(CX + math.cos(a) * r, CZ + math.sin(a) * r, AT, R(14, 26), ur:NextNumber() < 0.5)
+				end
+				teeth(210, 130, 302, 222, AT, 30)
+				rough(200, 120, 312, 232, AT, 70, { "x1", "x2", "z1", "z2" }, function(x, z)
+					return (z > 125 or x < 252 or x > 288) and (z < 227 or x < 256 or x > 288) -- (not across the gate or the lair's mouth)
+				end)
+				table.insert(info.Zones, 1, { Name = "Maw of Pyralis", MinX = 196, MaxX = 316, MinZ = 60, MaxZ = 236, MinY = FY - 12, MaxY = AT + 4 }) -- (the way east and the arena)
+				info.Underfire.Arena = { MinX = 208, MaxX = 304, MinZ = 128, MaxZ = 224, Centre = Vector3.new(CX, FY, CZ), Door = Vector3.new(270, FY, 119), Pillars = pillars, Spires = spires } -- (the island; for the boss to come)
+				-- the arena's gates, the lair's door, the run and the great lift beyond it, and PYRALIS BULWARK above (its own file)
+				require(script.Parent:WaitForChild("PyralisBulwark")).build({ part = part, box = box, prompt = prompt, addFlicker = addFlicker, info = info, map = map, under = under, FY = FY })
+			end
+			table.insert(info.Zones, 1, { Name = "Maw of Pyralis", MinX = 118, MaxX = 166, MinZ = 34, MaxZ = 124, MinY = FY - 12, MaxY = PH + 10 }) -- (the way west)
+		end
+
 
 		-- THE DOOR: through the first block's west wall (x -20..-18) at z 52..58, y 0..9.5, from this hallway's open east cell
 		-- into the start's west cell 4. A plank-and-iron leaf hung at its south edge (z 52): it swings open into the cell

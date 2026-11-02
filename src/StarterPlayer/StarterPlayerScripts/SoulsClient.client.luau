@@ -205,6 +205,22 @@ local bossName = new("TextLabel", {
 	Parent = bossFrame,
 })
 local bossChipV = 1
+-- a second boss bar, over the first, for a second boss in the same fight (Boss2Active / Boss2Name / Boss2HP / Boss2MaxHP)
+local boss2Frame = bossFrame:Clone()
+boss2Frame.Position = UDim2.new(0.5, 0, 1, -112)
+boss2Frame.Parent = gui
+local boss2Chip, boss2Fill
+for _, ch in ipairs(boss2Frame:GetChildren()) do
+	if ch:IsA("Frame") then
+		if ch.BackgroundColor3 == bossFill.BackgroundColor3 then
+			boss2Fill = ch
+		else
+			boss2Chip = ch
+		end
+	end
+end
+local boss2Name = boss2Frame:FindFirstChildOfClass("TextLabel")
+local boss2ChipV = 0
 
 -- full-screen fade overlay
 local overlay = new("Frame", {
@@ -1244,7 +1260,7 @@ local function separateFromEnemies()
 	for _, m in ipairs(EnemiesFolder:GetChildren()) do
 		local r = m:FindFirstChild("HumanoidRootPart")
 		local h = m:FindFirstChildOfClass("Humanoid")
-		if r and h and h.Health > 0 then
+		if r and h and h.Health > 0 and not m:GetAttribute("NoPush") then -- (NoPush: it has a solid body of its own to bump into)
 			local radius = m:GetAttribute("Radius") or 1.2
 			local rel = flat(pos - r.Position)
 			local minD = Config.Combat.PlayerRadius + radius
@@ -1295,7 +1311,7 @@ local devPanel = new("Frame", {
 	Name = "DevMenu",
 	AnchorPoint = Vector2.new(1, 0.5),
 	Position = UDim2.new(1, -36, 0.5, 0),
-	Size = UDim2.fromOffset(250, 0),
+	Size = UDim2.fromOffset(520, 0),
 	AutomaticSize = Enum.AutomaticSize.Y,
 	BackgroundColor3 = Color3.fromRGB(14, 12, 12),
 	BackgroundTransparency = 0.12,
@@ -1318,17 +1334,26 @@ new("TextLabel", {
 	Text = "Dev menu  (K to close)",
 	Parent = devPanel,
 })
+-- the buttons in two columns, in order across then down (LayoutOrder), so more fit on the screen
+local devGrid = new("Frame", {
+	LayoutOrder = 1,
+	Size = UDim2.new(1, 0, 0, 0),
+	AutomaticSize = Enum.AutomaticSize.Y,
+	BackgroundTransparency = 1,
+	Parent = devPanel,
+})
+new("UIGridLayout", { CellSize = UDim2.new(0.5, -4, 0, 38), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = devGrid })
 local function devButton(order, onClick)
 	local b = new("TextButton", {
 		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, 34),
 		BackgroundColor3 = Color3.fromRGB(40, 34, 30),
 		BorderSizePixel = 0,
 		AutoButtonColor = true,
 		Font = Enum.Font.SourceSansSemibold,
-		TextSize = 17,
+		TextSize = 15,
+		TextWrapped = true,
 		TextColor3 = Color3.fromRGB(230, 220, 200),
-		Parent = devPanel,
+		Parent = devGrid,
 	})
 	new("UICorner", { CornerRadius = UDim.new(0, 4), Parent = b })
 	b.Activated:Connect(onClick)
@@ -1396,6 +1421,47 @@ end).Text = "Teleport: stair down to the one-way cell door"
 devButton(18, function()
 	Action:FireServer("DevConsulHP")
 end).Text = "Consul's health to 1 (his rise)"
+devButton(20, function()
+	Action:FireServer("DevPyralis")
+end).Text = "Teleport: before Pyralis's arena (Maw of Pyralis)"
+devButton(22, function()
+	Action:FireServer("DevBulwark")
+end).Text = "Teleport: Pyralis Bulwark (the lift's top)"
+-- your position on screen, top centre: where your feet are (the root less 3), to whole studs - for pointing out spots
+local coordsLabel = new("TextLabel", {
+	Name = "DevCoords",
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.new(0.5, 0, 0, 8),
+	Size = UDim2.fromOffset(320, 30),
+	BackgroundColor3 = Color3.fromRGB(14, 12, 12),
+	BackgroundTransparency = 0.3,
+	BorderSizePixel = 0,
+	Font = Enum.Font.Code,
+	TextSize = 18,
+	TextColor3 = Color3.fromRGB(230, 220, 200),
+	Visible = false,
+	Parent = gui,
+})
+local coordsConn
+local coordsButton
+coordsButton = devButton(21, function()
+	coordsLabel.Visible = not coordsLabel.Visible
+	coordsButton.Text = coordsLabel.Visible and "Show my coordinates: ON" or "Show my coordinates: OFF"
+	if coordsConn then
+		coordsConn:Disconnect()
+		coordsConn = nil
+	end
+	if coordsLabel.Visible then
+		coordsConn = RunService.RenderStepped:Connect(function()
+			local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local p = hrp.Position
+				coordsLabel.Text = string.format("X %d   Y %d   Z %d", math.round(p.X), math.round(p.Y - 3), math.round(p.Z))
+			end
+		end)
+	end
+end)
+coordsButton.Text = "Show my coordinates: OFF"
 devRefresh()
 
 -- the equipment menu (T / Tab), Dark Souls 2 style: your five slots down the left (weapon, head,
@@ -1890,7 +1956,11 @@ local function updateCamera(dt)
 		if dir.Magnitude > 0.5 then
 			local k = 1 - math.exp(-dt * 8)
 			yaw = lerpAngle(yaw, math.atan2(-dir.X, -dir.Z), k)
-			pitch = pitch + (-0.24 - pitch) * k
+			-- tilted up (or down) by the target's height over you: level with you it's the usual look, a towering one
+			-- (the Malformed Watchdog's neck) is looked up at
+			local rise = lockTarget.HumanoidRootPart.Position.Y - (hrp.Position.Y + 2)
+			local want = math.clamp(-0.24 + 0.5 * math.atan2(rise, dir.Magnitude), -0.95, 0.55) -- (half the way up to it)
+			pitch = pitch + (want - pitch) * k
 		end
 	elseif not free then
 		local delta = UserInputService:GetMouseDelta()
@@ -1991,6 +2061,7 @@ local function updateMovement()
 		speed *= Config.TownFog.Slow -- the township fog drags at your legs
 	end
 	speed *= Config.weaponOf(player).MoveSpeed or 1 -- (the Gozen Tachi: a touch lighter on your feet)
+	speed *= Config.armorBonus(player).MoveSpeed -- (heavy armor: the Lion Hunter's)
 	if iaiReadyAt and t > iaiReadyAt + 0.4 and not player:GetAttribute("IaiReady") then
 		iaiReadyAt = nil -- the server never settled you into it (refused the sheathe): walk free
 	end
@@ -2061,7 +2132,18 @@ local function updateHud(dt)
 		bossChipV = b >= bossChipV and b or math.max(b, bossChipV - dt * 0.25)
 		bossChip.Size = UDim2.fromScale(bossChipV, 1)
 	else
-		bossChipV = 1
+		bossChipV = 0 -- (so a bar coming back snaps to the boss's health, not drains down to it from full)
+	end
+	local active2 = ReplicatedStorage:GetAttribute("Boss2Active") == true
+	boss2Frame.Visible = active2
+	if active2 then
+		local b = math.clamp((ReplicatedStorage:GetAttribute("Boss2HP") or 0) / (ReplicatedStorage:GetAttribute("Boss2MaxHP") or 1), 0, 1)
+		boss2Name.Text = ReplicatedStorage:GetAttribute("Boss2Name") or ""
+		boss2Fill.Size = UDim2.fromScale(b, 1)
+		boss2ChipV = b >= boss2ChipV and b or math.max(b, boss2ChipV - dt * 0.25)
+		boss2Chip.Size = UDim2.fromScale(boss2ChipV, 1)
+	else
+		boss2ChipV = 0
 	end
 end
 
@@ -2166,6 +2248,32 @@ do
 	player:GetAttributeChangedSignal("ConsulTint"):Connect(function()
 		local on = player:GetAttribute("ConsulTint") == true
 		tween(tint, on and 1.5 or 2, on and { TintColor = Color3.fromRGB(200, 150, 255), Brightness = -0.06, Contrast = 0.2, Saturation = 0.15 } or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
+	end)
+	-- beneath the fire (the buried room under the Fallen Cellblock's breach): near-black air, a dull red haze (the server sets Beneath)
+	local before = nil
+	local buried = Instance.new("ColorCorrectionEffect")
+	buried.Name = "BuriedTint"
+	buried.Parent = Lighting
+	player:GetAttributeChangedSignal("Beneath"):Connect(function()
+		local on = player:GetAttribute("Beneath") == true
+		local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+		before = before or { Ambient = Lighting.Ambient, EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale, atm = atm and { Density = atm.Density, Haze = atm.Haze, Color = atm.Color, Decay = atm.Decay } }
+		tween(Lighting, 2, on and { Ambient = Color3.fromRGB(30, 15, 12), EnvironmentDiffuseScale = 0.04 } or { Ambient = before.Ambient, EnvironmentDiffuseScale = before.EnvironmentDiffuseScale })
+		if atm and before.atm then
+			tween(atm, 2, on and { Density = 0.5, Haze = 2.4, Color = Color3.fromRGB(58, 12, 10), Decay = Color3.fromRGB(18, 3, 3) } or before.atm)
+		end
+		tween(buried, 2, on and { TintColor = Color3.fromRGB(255, 190, 180), Brightness = -0.05, Contrast = 0.12, Saturation = -0.15 } or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
+	end)
+	-- Pyralis Bulwark (the server sets Smoulder): only a touch dimmer than the open sky, warm (its walks are lit)
+	local smoulder = Instance.new("ColorCorrectionEffect")
+	smoulder.Name = "SmoulderTint"
+	smoulder.Parent = Lighting
+	local exposure0
+	player:GetAttributeChangedSignal("Smoulder"):Connect(function()
+		local on = player:GetAttribute("Smoulder") == true
+		exposure0 = exposure0 or Lighting.ExposureCompensation
+		tween(Lighting, 2.5, { ExposureCompensation = on and exposure0 - 0.1 or exposure0 })
+		tween(smoulder, 2.5, on and { TintColor = Color3.fromRGB(255, 205, 190), Brightness = -0.04, Contrast = 0.08, Saturation = -0.08 } or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
 	end)
 end
 
@@ -2376,6 +2484,7 @@ task.spawn(function()
 	workspace:WaitForChild("DGUS", 30)
 	require(ReplicatedStorage:WaitForChild("Carrier")).growths()
 	require(ReplicatedStorage:WaitForChild("Carrier")).cloth()
+	require(ReplicatedStorage:WaitForChild("PyralisProto")).animate() -- (the three takes on Pyralis, in its arena)
 end)
 if player.Character then
 	task.spawn(onCharacter, player.Character)

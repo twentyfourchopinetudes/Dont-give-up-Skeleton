@@ -22,21 +22,38 @@ M.Poses = {
 	-- his resting stance: weight low and shifting, the chest heaving
 	BIdle = { drop = 0.3, lean = 0.2, twist = -0.12, head = 0.08, footR = -0.35, footL = 0.4, spread = 0.12, breathe = 2.6, freeL = 0 },
 	-- the first beat of every wind-up: he settles his weight and gathers himself
-	BGather = { drop = 0.5, lean = 0.28, twist = -0.32, side = 0.07, head = 0.18, footR = -0.3, footL = 0.45, spread = 0.14, breathe = 3, freeL = 0 },
+	BGather = { drop = 0.5, lean = 0.28, twist = -0.32, hip = -0.12, look = 0.12, side = 0.07, head = 0.18, footR = -0.3, footL = 0.45, spread = 0.14, breathe = 3, freeL = 0 },
 	-- rearing back for an overhead blow (deeper than the shared Windup)
-	BRear = { drop = 0.18, lean = -0.42, twist = 0.38, side = -0.06, head = -0.28, footR = -0.5, footL = 0.6, spread = 0.1, breathe = 3, freeL = 0 },
+	BRear = { drop = 0.18, lean = -0.42, twist = 0.38, hip = 0.2, look = -0.15, side = -0.06, head = -0.28, footR = -0.5, footL = 0.6, spread = 0.1, breathe = 3, freeL = 0 },
 	-- the torso wound round for a low sweep (deeper than the shared SweepWindup)
 	BCoil = { drop = 0.65, lean = 0.3, twist = -1.15, side = -0.1, head = -0.05, footR = -0.4, footL = 0.6, spread = 0.25, breathe = 2.5, freeL = 0 },
 	-- weight rocking onto the planted leg before the stomp
-	BStompGather = { drop = 0.5, lean = 0.15, side = 0.18, twist = 0.1, head = 0.1, footR = 0.2, footL = -0.1, breathe = 3, freeL = 0 },
+	BStompGather = { drop = 0.5, lean = 0.15, side = 0.18, twist = 0.1, hip = 0.12, liftL = 0.15, head = 0.1, footR = 0.2, footL = -0.1, breathe = 3, freeL = 0 },
 	-- follow-through: the blow carries his whole body with it
-	BSlamDrive = { drop = 0.85, lean = 0.82, twist = -0.25, side = 0.05, head = 0.28, footR = 0.95, footL = -0.85, spread = 0.18, breathe = 3, freeL = 0 },
+	BSlamDrive = { drop = 0.85, lean = 0.82, twist = -0.25, hip = -0.18, look = 0.1, side = 0.05, head = 0.28, footR = 0.95, footL = -0.85, spread = 0.18, breathe = 3, freeL = 0 },
 	BSweepThrough = { drop = 0.55, lean = 0.38, twist = 1.2, side = 0.1, head = 0.05, footR = 0.75, footL = -0.45, spread = 0.3, breathe = 3, freeL = 0 },
 	BSweepReturn = { drop = 0.5, lean = 0.3, twist = -1.05, side = -0.1, head = 0.05, footR = -0.4, footL = 0.7, spread = 0.3, breathe = 3, freeL = 0 },
 	-- squaring the shoulders and sinking before the charge
-	BChargeSet = { drop = 0.6, lean = 0.45, twist = -0.2, head = -0.1, footR = 0.6, footL = -0.7, breathe = 3, freeL = 0 },
-	Charge = { drop = 0.85, lean = 0.8, twist = -0.35, head = -0.25, footR = 1.0, footL = -1.0, la1 = -0.6, la3 = -0.4, lel = 1.0, freeL = 0 },
-	StompLift = { drop = 0.1, lean = -0.18, lift = 1.7, footR = 0.7, la1 = 0.5, la3 = -1.1, freeL = 0 },
+	BChargeSet = { drop = 0.6, lean = 0.45, twist = -0.2, hip = -0.15, side = 0.06, head = -0.1, footR = 0.6, footL = -0.7, breathe = 3, freeL = 0 },
+	Charge = { drop = 0.85, lean = 0.8, twist = -0.35, hip = 0.1, look = 0.25, head = -0.25, footR = 1.0, footL = -1.0, la1 = -0.6, la3 = -0.4, lel = 1.0, freeL = 0 },
+	StompLift = { drop = 0.1, lean = -0.18, side = -0.12, hip = 0.15, lift = 1.7, footR = 0.7, la1 = 0.5, la3 = -1.1, freeL = 0 },
+	-- THE REAPING SWEEP (bossSweep): his whole body in it - feet, knees, hips over planted feet (hip), waist (twist, side,
+	-- lean), and the head held on you over the shoulder (look) while the rest of him winds away.
+	-- plant: the left foot thrown wide and forward, sinking, the mace let down at his right side
+	WPlant = { drop = 0.55, lean = 0.3, twist = -0.4, hip = -0.2, side = 0.05, head = 0.15, look = 0.35, footR = -0.5, footL = 0.75, spread = 0.3, breathe = 3, freeL = 0 },
+	-- haul: hips and shoulders dragged round to the right after the mace, its head grinding the floor behind him
+	WHaul = { drop = 0.75, lean = 0.45, twist = -1.0, hip = -0.45, side = -0.08, head = 0.1, look = 0.65, footR = -0.8, footL = 0.9, spread = 0.35, breathe = 3.5, freeL = 0 },
+	-- load: wound as far as he goes - back nearly to you, knees deep, only his eyes still on you. Then it all lets go
+	WLoad = { drop = 0.95, lean = 0.5, twist = -1.5, hip = -0.75, side = -0.15, head = -0.05, look = 1.0, footR = -0.95, footL = 1.0, spread = 0.42, breathe = 4.5, freeL = 0 },
+	-- the release: driving off the back foot, the hips leading the shoulders through, then the right foot dragged round
+	-- after the swing as it pulls him on into the finish
+	WRelease = { drop = 0.85, lean = 0.62, twist = 0.1, hip = 0.15, side = 0.1, head = 0.22, look = -0.1, footR = 0.1, footL = 1.15, spread = 0.42, breathe = 3, freeL = 0 },
+	WFinish = { drop = 0.72, lean = 0.5, twist = 1.4, hip = 0.6, side = 0.16, head = 0.1, look = -0.6, footR = 0.9, footL = 0.35, spread = 0.3, breathe = 3, freeL = 0 },
+	-- THE BACKHAND (phase 2): the swing's weight carried on round behind his left side, the right foot planted, wound the
+	-- other way, then the whole of him unwinding back across
+	WBackCoil = { drop = 0.9, lean = 0.45, twist = 1.6, hip = 0.8, side = 0.14, head = 0, look = -1.0, footR = 1.05, footL = -0.5, spread = 0.42, breathe = 4.5, freeL = 0 },
+	WBackThrough = { drop = 0.85, lean = 0.62, twist = -0.1, hip = -0.15, side = -0.1, head = 0.22, look = 0.1, footR = 1.2, footL = -0.2, spread = 0.42, breathe = 3, freeL = 0 },
+	WBackFinish = { drop = 0.75, lean = 0.55, twist = -1.4, hip = -0.6, side = -0.16, head = 0.12, look = 0.6, footR = 0.4, footL = -0.9, spread = 0.3, breathe = 3, freeL = 0 },
 	-- (an old spin wind-up: sinks low, feet wide, torso wound all the way round)
 	Coil = { drop = 0.95, lean = 0.35, twist = -1.45, side = -0.08, head = -0.1, footR = -0.6, footL = 0.7, spread = 0.3, la1 = 0.4, la3 = -1.0, lel = 0.4, freeL = 0, breathe = 2.5 },
 }
@@ -70,9 +87,80 @@ function M.Look(k)
 		deco(n .. "UpperArm", "PauldronSkull", V(0.55, 0.55, 0.55), at(sx * aw * 0.7, ua / 2 + 0.2, 0), plateDark, MAT.SmoothPlastic, Enum.PartType.Ball)
 		deco(n .. "UpperArm", "Spike", V(0.18, 0.8, 0.18), at(sx * aw * 0.55, ua / 2 + 0.55, 0.15) * CFrame.Angles(0, 0, -sx * 0.5), plateDark, MAT.SmoothPlastic)
 		deco(n .. "LowerArm", "Gauntlet", V(aw * 1.2, 0.8, aw * 1.2), at(0, -la / 2 + 0.4, 0), plateDark, MAT.Metal)
-		deco(n .. "Shin", "Greave", V(lw * 1.12, D.shin / s * 0.85, lw * 1.12), at(0, -0.05, 0), plate, MAT.Metal)
-		deco(n .. "Thigh", "Cuisse", V(lw * 1.12, 0.9, lw * 1.12), at(0, 0, 0), plateDark, MAT.Metal)
-		deco(n .. "Foot", "Sabaton", V(0.66, 0.32, 1.1), at(0, 0.02, -0.02), plateDark, MAT.Metal)
+	end
+	-- BELOW THE WAIST, A MANGLED MESS (as the Watchdogs are): no pair of legs in plate but a knot of fused flesh and bone,
+	-- the two it walks on not matching - the right swollen, the left wasted and twisted with a toe too many - and more
+	-- that never grew right hanging off the mass: a withered third limb dragging behind, a stub with a claw, spurs. The
+	-- rig's leg boxes are hidden; everything here rides on them, so it still walks as he does.
+	local BALL, CYL = Enum.PartType.Ball, Enum.PartType.Cylinder
+	local flesh, fleshDark, sinew = rgb(66, 38, 34), rgb(40, 24, 22), rgb(120, 64, 54)
+	local tl, sl = D.thigh / s, D.shin / s
+	local function ball(on, d, cf, col, mat)
+		deco(on, "Mangle", V(d, d, d), cf, col, mat or MAT.Fabric, BALL)
+	end
+	local function rod(on, len, d, cf, col, mat) -- (standing along the cf's y)
+		deco(on, "Mangle", V(len, d, d), cf * CFrame.Angles(0, 0, math.pi / 2), col, mat or MAT.Fabric, CYL)
+	end
+	for _, pn in ipairs({ "RThigh", "LThigh", "RShin", "LShin", "RFoot", "LFoot" }) do
+		k.parts[pn].Transparency = 1
+	end
+	-- the mass at the hips both legs grow out of, lopsided, plate fused into it where it burst out of his faulds
+	ball("Hips", hw * 1.05, at(0.1, -0.3, 0), fleshDark)
+	ball("Hips", hw * 0.7, at(hw * 0.32, -0.45, -0.25), flesh)
+	ball("Hips", hw * 0.55, at(-hw * 0.3, -0.5, 0.3), flesh)
+	ball("Hips", 0.5, at(-0.2, -0.8, -hd * 0.5), sinew)
+	deco("Hips", "Mangle", V(0.7, 0.5, 0.12), at(hw * 0.35, -0.3, -hd * 0.62) * CFrame.Angles(0.3, 0.4, 0.5), plateDark, MAT.Metal)
+	deco("Hips", "Mangle", V(0.5, 0.6, 0.12), at(-hw * 0.4, -0.4, hd * 0.6) * CFrame.Angles(-0.4, -0.2, -0.7), plate, MAT.Metal)
+	for _, sp in ipairs({ { 0.5, -0.2, 0.5, 0.9, -0.9, 0.3 }, { -0.6, -0.5, 0.4, 0.7, -1.2, -0.5 }, { 0.1, -0.7, 0.6, 0.6, -1.5, 0.1 } }) do -- (bone driven out the back)
+		deco("Hips", "Mangle", V(0.14, sp[4], 0.14), at(sp[1], sp[2], sp[3]) * CFrame.Angles(sp[5], 0, sp[6]) * at(0, sp[4] / 2, 0), bone, MAT.SmoothPlastic)
+	end
+	-- the withered third limb, out of the back of the mass and trailing on the ground, its claw dragging
+	local drag = at(0.15, -0.55, hd * 0.55) * CFrame.Angles(-0.95, 0.15, 0)
+	rod("Hips", 1.6, 0.36, drag * at(0, -0.8, 0), fleshDark)
+	ball("Hips", 0.42, drag * at(0, -1.6, 0), sinew)
+	rod("Hips", 1.1, 0.26, drag * at(0, -1.6, 0) * CFrame.Angles(0.9, 0, 0) * at(0, -0.55, 0), flesh)
+	for _, x in ipairs({ -0.1, 0.1 }) do
+		deco("Hips", "Mangle", V(0.1, 0.1, 0.4), drag * at(0, -1.6, 0) * CFrame.Angles(0.9, 0, 0) * at(x, -1.15, -0.1), rgb(26, 22, 20), MAT.Slate)
+	end
+	-- a stub on the left that never grew past the elbow, a claw at its end
+	local stub = at(-hw * 0.5, -0.35, -0.1) * CFrame.Angles(0.2, 0, -0.9)
+	rod("Hips", 0.7, 0.3, stub * at(0, -0.35, 0), flesh)
+	deco("Hips", "Mangle", V(0.1, 0.35, 0.1), stub * at(0, -0.8, 0) * CFrame.Angles(0.5, 0, 0), bone, MAT.SmoothPlastic)
+	-- the two it walks on
+	for _, n in ipairs({ "R", "L" }) do
+		local sx = n == "R" and 1 or -1
+		local sw = n == "R" and 1.25 or 0.85 -- (the right swollen, the left wasted)
+		local th, sh, ft = n .. "Thigh", n .. "Shin", n .. "Foot"
+		-- thigh: a core with muscle knotted round it, unevenly, and a scrap of the old cuisse sunk in it
+		rod(th, tl, lw * 0.85 * sw, at(0, 0, 0) * CFrame.Angles(0.06, 0, sx * 0.08), flesh)
+		ball(th, lw * 1.1 * sw, at(sx * 0.12, tl * 0.32, -0.1), fleshDark)
+		ball(th, lw * 0.85 * sw, at(-sx * 0.1, -tl * 0.05, 0.22), flesh)
+		ball(th, lw * 0.7 * sw, at(sx * 0.22, -tl * 0.25, -0.15), fleshDark)
+		deco(th, "Mangle", V(lw * 0.9, 0.5, 0.1), at(sx * 0.1, 0.05, -lw * 0.55) * CFrame.Angles(0.15, sx * 0.3, sx * 0.4), plateDark, MAT.Metal)
+		if n == "R" then -- (a cluster of blisters on the swollen one)
+			for _, g in ipairs({ { 0.35, 0.4, 0.1, -0.35 }, { 0.28, 0.45, -0.15, -0.25 }, { 0.22, 0.38, -0.3, -0.42 } }) do
+				ball(th, g[1], at(g[2], g[3], g[4]), sinew)
+			end
+		end
+		-- the knee: a knob of bone, a spur out the back of it
+		ball(th, lw * 0.95, at(0, -tl * 0.5, 0.05), bone:Lerp(fleshDark, 0.4), MAT.Slate)
+		deco(th, "Mangle", V(0.12, 0.12, 0.6), at(0, -tl * 0.45, 0.45) * CFrame.Angles(-0.5, sx * 0.2, 0), bone, MAT.SmoothPlastic)
+		-- shin: twisted and tapering, tendons standing proud down the back, a lump where it set wrong
+		rod(sh, sl, lw * 0.65 * sw, at(0, 0, 0) * CFrame.Angles(-0.05, 0, -sx * 0.1), fleshDark)
+		ball(sh, lw * 0.7 * sw, at(sx * 0.12, sl * 0.15, -0.12), flesh)
+		for _, x in ipairs({ -0.12, 0.12 }) do
+			rod(sh, sl * 0.9, 0.1, at(x, 0, lw * 0.32) * CFrame.Angles(0.1, 0, 0), sinew)
+		end
+		ball(sh, lw * 0.65, at(0, -sl * 0.48, 0), fleshDark) -- (the ankle)
+		-- foot: a heel mass and knuckled toes hooking into claws; the left with one crowded in too many
+		ball(ft, 0.6 * sw, at(0, 0, 0.2), fleshDark)
+		for j, x in ipairs(n == "L" and { -0.24, -0.08, 0.06, 0.2 } or { -0.22, 0, 0.22 }) do
+			local d = (0.28 + (j % 2) * 0.05) * sw
+			local cf = at(x, -0.05, -0.25) * CFrame.Angles(0, -x * 0.6, 0)
+			ball(ft, d, cf, flesh)
+			ball(ft, d * 0.8, cf * at(0, -0.02, -0.22), fleshDark)
+			deco(ft, "Mangle", V(0.1, 0.09, 0.28), cf * at(0, -0.06, -0.45) * CFrame.Angles(-0.6, 0, 0), rgb(26, 22, 20), MAT.Slate)
+		end
 	end
 	-- the death-mask: a blackened skull under an iron crown band, a fanged maw, ram's horns.
 	local up = CFrame.Angles(0, 0, math.pi / 2)
@@ -173,6 +261,19 @@ M.Grips = {
 	BHeft = { Vector3.new(1.3, 1.0, 0.7), CFrame.Angles(math.rad(190), 0, math.rad(15)) },
 	-- ...or dropped low at his side, head trailing, before a sweep or a charge
 	BSweepGather = { Vector3.new(1.4, -0.6, 0.3), CFrame.Angles(0, math.rad(-20), 0) * CFrame.Angles(math.rad(-45), 0, math.rad(55)) },
+	-- THE REAPING SWEEP (his alone; the B ones above are shared with the Castellan). Yaw = which way out the haft points,
+	-- the second angle how near flat it lies. Let down at his side, dragged round behind him head on the floor, lifted
+	-- into the load, then out wide - well past where the old sweep reached - right, front, left, and wrapped round
+	WReapLow = { Vector3.new(1.5, -0.8, 0.5), CFrame.Angles(0, math.rad(-25), 0) * CFrame.Angles(math.rad(-35), 0, math.rad(48)) },
+	WReapHaul = { Vector3.new(1.6, -0.8, 1.8), CFrame.Angles(0, math.rad(-75), 0) * CFrame.Angles(0, 0, math.rad(52)) },
+	WReapLoad = { Vector3.new(1.2, -0.4, 2.3), CFrame.Angles(0, math.rad(-100), 0) * CFrame.Angles(math.rad(8), 0, math.rad(72)) },
+	WReapR = { Vector3.new(2.7, -0.7, -0.6), CFrame.Angles(0, math.rad(12), 0) * CFrame.Angles(0, 0, math.rad(68)) },
+	WReapFront = { Vector3.new(0.2, -0.7, -2.9), CFrame.Angles(0, math.rad(90), 0) * CFrame.Angles(0, 0, math.rad(68)) },
+	WReapL = { Vector3.new(-2.5, -0.7, -0.9), CFrame.Angles(0, math.rad(160), 0) * CFrame.Angles(0, 0, math.rad(68)) },
+	WReapEnd = { Vector3.new(-1.5, -0.5, 0.9), CFrame.Angles(0, math.rad(215), 0) * CFrame.Angles(0, 0, math.rad(62)) },
+	-- the backhand: the swing's weight carried on round behind his left side and lifted, then back across the same way
+	WBackLoad = { Vector3.new(-1.0, -0.4, 2.3), CFrame.Angles(0, math.rad(255), 0) * CFrame.Angles(math.rad(-8), 0, math.rad(72)) },
+	WBackEnd = { Vector3.new(1.7, -0.5, 1.0), CFrame.Angles(0, math.rad(-35), 0) * CFrame.Angles(0, 0, math.rad(62)) },
 }
 M.BodyFor = { BSweepBack = "SweepWindup", BSweepEnd = "SweepEnd" }
 
@@ -319,13 +420,22 @@ local function draw(b, grip, body, t)
 		bodyPose(b, body, t)
 	end
 end
-local function windup2(b, target, gather, full, track)
-	draw(b, gather[1], gather[2], gather[3])
-	if not windupTrack(b, gather[3], math.min(track / gather[3], 1), target) then
-		return false
+-- any number of beats: { grip, body pose, seconds, onStart? } each; tracks for the first `track` seconds in all
+local function windupBeats(b, target, list, track)
+	for _, bt in ipairs(list) do
+		draw(b, bt[1], bt[2], bt[3])
+		if bt[4] then
+			bt[4]()
+		end
+		if not windupTrack(b, bt[3], math.clamp(track / bt[3], 0, 1), target) then
+			return false
+		end
+		track -= bt[3]
 	end
-	draw(b, full[1], full[2], full[3])
-	return windupTrack(b, full[3], math.max(track - gather[3], 0) / full[3], target)
+	return true
+end
+local function windup2(b, target, gather, full, track)
+	return windupBeats(b, target, { gather, full }, track)
 end
 
 local function waitLive(b, duration)
@@ -583,13 +693,13 @@ local function stopAndFace(b, target)
 end
 
 -- Every attack opens with a physical tell: the eyes flare and it growls.
-local function tell(b, pitch)
+local function tell(b, pitch, hold) -- (hold: seconds the eyes stay lit, 0.35 by default)
 	playSound(b.root, SOUNDS.Groan, 0.7, pitch or 0.32)
 	for _, d in ipairs(b.model:GetChildren()) do
 		if d.Name == "Eye" and d:IsA("BasePart") then
 			local base = d.Color
 			d.Color = Color3.fromRGB(255, 150, 90)
-			task.delay(0.35, function()
+			task.delay(hold or 0.35, function()
 				if d.Parent then
 					TweenService:Create(d, TweenInfo.new(0.5), { Color = base }):Play()
 				end
@@ -704,40 +814,129 @@ local function bossSlam(b, target, opts)
 	end
 end
 
--- Low sweep: winds the torso round to the right, mace trailing, then unwinds.
+-- THE REAPING SWEEP: the move he puts the most into, and gives you the longest look at. He lets the mace down at his
+-- side and plants his front foot wide; hauls it round behind him, its head grinding sparks along the floor; then winds
+-- all the way - back nearly to you, knees deep, eyes still on you - while the floor cracks out to where it will reach
+-- (glowing, in phase 2) and he draws a long breath. He stops turning to follow you for that last beat: that's the read.
+-- Then everything lets go at once, from the feet up - a big step in, the hips leading the shoulders through - and the
+-- mace goes out wide, much further from him than his other blows, right round to his left. opts.followUp (phase 2):
+-- the weight carried on round behind his other side into a second, shorter wind and the backhand back across.
+local REACH = 24 -- studs from where he stands that the sweep's cracks run out to (the swing's tip, plus the step)
+
+-- the mace's head dragged on the floor: sparks and grit where it is, every few frames, for dur
+local function scrape(b, dur)
+	task.spawn(function()
+		local t0, gen = now(), b.gen
+		while now() - t0 < dur / SPEED and boss.gen == gen and live(b) do
+			local _, tip = maceEnds(b)
+			if tip then
+				local p = Vector3.new(tip.X, 0.3, tip.Z)
+				burst(p, Color3.fromRGB(255, 170, 80), 5, 0.25, 18)
+				dustCloud(p, 1.2, 2)
+			end
+			task.wait(0.06)
+		end
+	end)
+end
+
+-- the floor cracking out round him to the sweep's reach while he loads it; returns what fades it
+local function sweepCracks(b, dur)
+	local fwd = flat(b.root.CFrame.LookVector)
+	local c = b.root.Position + (fwd.Magnitude > 0.1 and fwd.Unit * 4 or Vector3.zero)
+	c = Vector3.new(c.X, 0.2, c.Z)
+	FxRemote:FireAllClients("Shake", c, 0.25)
+	if boss.phase2 then
+		return heatCracks(c, REACH, dur)
+	end
+	local list = crackLines(c, REACH, 9, Color3.fromRGB(26, 24, 22), Enum.Material.Slate, dur)
+	return function()
+		fadeAway(list, 1.5, 1)
+	end
+end
+
+-- one swing along a chain of grips: { grip, seconds } each, the body following; hurts for as long as the chain runs
+-- but its last link (the follow-through). Returns once the hurting part is over
+local function reap(b, chain, bodyMid, bodyEnd, damage, step)
+	setTrail(b, true)
+	stepInto(b, step, 0.32)
+	footDust(b, -1, 6)
+	bodyPose(b, bodyMid, 0.24)
+	playSound(b.root, SOUNDS.Slash, 1, 0.42)
+	playSound(b.root, SOUNDS.Lunge, 0.8, 0.45)
+	local hurt = 0
+	for i = 1, #chain - 1 do
+		hurt += chain[i][2]
+	end
+	task.spawn(function()
+		local gen = b.gen
+		for i, link in ipairs(chain) do
+			if boss.gen ~= gen or not live(b) then
+				return
+			end
+			pose(b, link[1], link[2], i == #chain and Enum.EasingStyle.Quad or Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+			if i == #chain - 1 then
+				bodyPose(b, bodyEnd, 0.32)
+			end
+			task.wait(link[2] / SPEED)
+		end
+	end)
+	maceSweep(b, hurt + 0.04, damage, "Large", {}, 2.8)
+	FxRemote:FireAllClients("Shake", b.root.Position, 0.5)
+end
+
 local function bossSweep(b, target, opts)
 	opts = opts or {}
 	local m = tempo()
 	stopAndFace(b, target)
-	tell(b, 0.36)
-	playSound(b.root, SOUNDS.Unsheath, 0.8, 0.4)
-	if not windup2(b, target, { "BSweepGather", "BGather", 0.35 * m }, { "BSweepBack", "BCoil", 0.7 * m }, 0.84 * m) then
+	local load = 0.55 * m
+	local wind = 0.4 * m + 0.6 * m + load
+	tell(b, 0.36, wind / SPEED)
+	playSound(b.root, SOUNDS.Unsheath, 0.8, 0.38)
+	local fade
+	local ok = windupBeats(b, target, {
+		{ "WReapLow", "WPlant", 0.4 * m, function()
+			footDust(b, -1, 5)
+		end },
+		{ "WReapHaul", "WHaul", 0.6 * m, function()
+			scrape(b, 0.6 * m)
+			playSound(b.root, SOUNDS.Unsheath, 0.9, 0.28)
+		end },
+		{ "WReapLoad", "WLoad", load, function()
+			fade = sweepCracks(b, load / SPEED)
+			playSound(b.root, SOUNDS.Breath, 0.9, 0.5)
+		end },
+	}, 0.4 * m + 0.6 * m) -- (tracks you through the plant and the haul; the load is committed)
+	if fade then
+		fade()
+	end
+	if not ok then
 		return
 	end
-	setTrail(b, true)
-	stepInto(b, 4, 0.3)
-	pose(b, "BSweepMid", 0.2, Enum.EasingStyle.Linear)
-	bodyPose(b, "BSweepThrough", 0.42) -- the hips and shoulders unwind all the way through
-	task.delay(0.2, function()
-		pose(b, "BSweepEnd", 0.22)
-	end)
-	playSound(b.root, SOUNDS.Slash, 1, 0.45)
-	maceSweep(b, 0.42, 30, "Large", {}, 2.4)
+	reap(b, { { "WReapR", 0.09 }, { "WReapFront", 0.12 }, { "WReapL", 0.12 }, { "WReapEnd", 0.24 } }, "WRelease", "WFinish", 30, 8)
 	if opts.followUp and bossFree(b) then
-		-- backhand: a short visible re-wind, then the reverse arc
-		draw(b, "BSweepEnd", "SweepEnd", 0.3)
-		if not windupTrack(b, 0.42 * m, 0.7, target) then
+		-- the backhand: the mace's weight carried on round behind his left side, his right foot planted, wound the other
+		-- way while the eyes flare again; then back across
+		local coil = 0.55 * m
+		tell(b, 0.4, coil / SPEED)
+		scrape(b, 0.3)
+		local fade2
+		local ok2 = windupBeats(b, target, {
+			{ "WBackLoad", "WBackCoil", coil, function()
+				footDust(b, 1, 6)
+				playSound(b.root, SOUNDS.Breath, 0.8, 0.6)
+				fade2 = sweepCracks(b, coil / SPEED)
+			end },
+		}, coil * 0.6)
+		if fade2 then
+			fade2()
+		end
+		if not ok2 then
 			return
 		end
-		pose(b, "BSweepMid", 0.2, Enum.EasingStyle.Linear)
-		task.delay(0.2, function()
-			pose(b, "BSweepBack", 0.22)
-		end)
-		playSound(b.root, SOUNDS.Slash, 1, 0.4)
-		maceSweep(b, 0.42, 28, "Large", {}, 2.4)
+		reap(b, { { "WReapL", 0.1 }, { "WReapFront", 0.12 }, { "WReapR", 0.12 }, { "WBackEnd", 0.24 } }, "WBackThrough", "WBackFinish", 28, 6)
 	end
-	FxRemote:FireAllClients("Shake", b.root.Position, 0.4)
-	if waitLive(b, opts.recover or 0.9 * m) and not opts.recover then
+	bodyPose(b, "Recover", 0.6) -- (bent over, the mace's weight still pulling him round: the punish window)
+	if waitLive(b, opts.recover or 0.95 * m) and not opts.recover then
 		bossIdleArm(b)
 	end
 end
@@ -1125,7 +1324,7 @@ end
 -- fast = used to punish you drinking a flask.
 local BOSS_MOVES = {
 	{ name = "Slam", min = 6, max = 17, weight = 3, cd = 0, fast = false, fn = function(b, t) bossSlam(b, t, { delayed = math.random() < (boss.phase2 and 0.5 or 0.3) }) end },
-	{ name = "Sweep", min = 5, max = 17, weight = 3, cd = 0, fast = true, fn = function(b, t) bossSweep(b, t, { followUp = boss.phase2 and math.random() < 0.6 }) end }, -- (the backhand: phase 2 only)
+	{ name = "Sweep", min = 5, max = 21, weight = 3, cd = 0, fast = true, fn = function(b, t) bossSweep(b, t, { followUp = boss.phase2 and math.random() < 0.6 }) end }, -- (the backhand: phase 2 only)
 	{ name = "Stomp", min = 0, max = 9, weight = 2, cd = 4, behind = true, fn = function(b) bossStomp(b) end },
 	{ name = "Charge", min = 14, max = 42, weight = 3, cd = 6, fast = true, fn = bossCharge },
 	{ name = "Shockline", min = 12, max = 50, weight = 2, cd = 7, fn = bossShockline },

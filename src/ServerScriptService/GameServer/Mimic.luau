@@ -401,7 +401,7 @@ function Mimic.init(core)
 			setLid(0.7, G.ChewTime * 0.12, Enum.EasingStyle.Linear)
 			root.CFrame = rest
 			playSound(root, SOUNDS.Impact, 0.9, 0.5 + i * 0.08)
-			burst(mouth, Color3.fromRGB(110, 14, 16), 14, 0.3, 10)
+			burst(mouth, Color3.fromRGB(46, 66, 34), 14, 0.3, 10) -- (dark green: no blood)
 			core.FxRemote:FireAllClients("Shake", root.Position, 0.45)
 			damagePlayer(player, G.ChewDamage, root.Position, "Small")
 			-- (a hit's stun would free your inputs early: pin them again)

@@ -99,7 +99,21 @@ Config.BookAttacks = {
 	},
 }
 
--- The Dark Book (a mushroom hut's chest): like the Old Book, but every cast is a dark beam from the
+-- The Dragon Tooth Wand (both Watchdogs' drop; key PyralisFang): the Old Book's casts from a wand, harder, faster and bigger, and Fire tells
+-- more on it (Config.Weapons.PyralisFang): 16 x (1 + 0.7 a point) - 38 at 2 Fire, 50 at 3 (the Old Book's: 25, 32)
+Config.WandAttacks = {
+	Light = {
+		{ Cost = 16, Windup = 0.18, Swing = 0.1, Recover = 0.32, Damage = 16, Poise = 8, HitStop = 0.03, Poses = { "WDraw", "BCast", "BCast" }, Range = 7, HalfAngle = 60, Fireball = { Speed = 105, Range = 150, Radius = 1.7, Size = 1.25 } },
+	},
+	Heavy = {
+		{ Cost = 30, Windup = 0.5, Swing = 0.1, Recover = 0.42, Damage = 30, Poise = 20, HitStop = 0.06, Poses = { "WDraw", "BCast", "BCast" }, Range = 7, HalfAngle = 60, Fireball = { Speed = 80, Range = 150, Radius = 2.8, Size = 2.3 } },
+	},
+	Running = {
+		{ Cost = 16, Windup = 0.18, Swing = 0.1, Recover = 0.32, Damage = 16, Poise = 8, HitStop = 0.03, Poses = { "WDraw", "BCast", "BCast" }, Range = 7, HalfAngle = 60, Carry = 0.6, CarrySpeed = 0, Fireball = { Speed = 105, Range = 150, Radius = 1.7, Size = 1.25 } },
+	},
+}
+
+-- The Dark Book (the Consul of Decay's drop - Aldous's own): like the Old Book, but every cast is a dark beam from the
 -- pages, along your aim, for Duration s. It hurts everything in it every Tick s for Pct % of that
 -- enemy's MAX health (x the Darkness scaling). Laser = { Pct, Duration, Range, Width, Poise, Hold, Drain }.
 -- Hold: the light attack's beam stays out while the button is held (Duration is the least a tap
@@ -186,6 +200,11 @@ Config.Weapons = {
 		Name = "Old Book", Attacks = Config.BookAttacks, Idle = "BRead", Scale = 1, Reach = 1,
 		Scaling = { Fire = { Per = 0.55 } },
 	},
+	-- the Watchdogs' drop: the Malformed one's fang, the True one's fire still in it. The Old Book, bettered
+	PyralisFang = {
+		Name = "Dragon Tooth Wand", Attacks = Config.WandAttacks, Idle = "WHold", Scale = 1, Reach = 1, FireReq = 4, -- (FireReq: the Fire it needs to wield)
+		Scaling = { Fire = { Per = 0.7 } },
+	},
 	-- the Old Book's dark twin: a beam, not a ball. Darkness raises the % of max health it takes
 	DarkBook = {
 		Name = "Dark Book", Attacks = Config.DarkBookAttacks, Idle = "BRead", Scale = 1, Reach = 1,
@@ -221,11 +240,14 @@ Config.Armor = {
 	-- Regen = { Amount, Every }: that much health every that many seconds, always
 	CaelenArmor = { Name = "Caelen's Silver Plate", Slots = { "Body" }, Health = 0.1, Grow = 1.15, Regen = { Amount = 1, Every = 0.5 } },
 	DarkHood = { Name = "Dark Hood", Slots = { "Head" }, Stats = { Darkness = 1 } },
+	-- the blazing chest in the Underfire's side chamber (key PotbellyArmor): heavy - much more health, slower on your feet.
+	-- MoveSpeed = your walk/sprint speed multiplier while it's worn (nil = 1)
+	PotbellyArmor = { Name = "Armor of a Lion Hunter", Slots = { "Body" }, Health = 0.9, Grow = 1.15, MoveSpeed = 0.85, Regen = { Amount = 1, Every = 0.5 } },
 }
 Config.ArmorSets = {
 	{ Pieces = { "DarkCloak", "DarkHood" }, Stats = { Darkness = 1 }, Aura = 2 }, -- (3 Darkness in all)
 }
-Config.ArmorOrder = { "Helmet", "Motley", "DarkCloak", "DarkHood", "CaelenArmor" }
+Config.ArmorOrder = { "Helmet", "Motley", "DarkCloak", "DarkHood", "CaelenArmor", "PotbellyArmor" }
 -- the dark aura's look (Armor.luau): an asset id - a VFX model (its particle emitters are
 -- used as they are), or an image/decal (the haze is drawn with it). 0 = the built-in haze
 Config.DarkAuraAsset = 108947832678179
@@ -245,7 +267,7 @@ end
 -- what it all adds up to, sets included: { Stats = { [stat] = n }, Health = x, Aura = n }
 function Config.armorBonus(player)
 	local worn = Config.wornArmor(player)
-	local out = { Stats = {}, Health = 0, Aura = 0, Regen = 0, Grow = 1 } -- (Regen: health a second)
+	local out = { Stats = {}, Health = 0, Aura = 0, Regen = 0, Grow = 1, MoveSpeed = 1 } -- (Regen: health a second)
 	local function add(def)
 		for k, v in pairs(def.Stats or {}) do
 			out.Stats[k] = (out.Stats[k] or 0) + v
@@ -253,6 +275,7 @@ function Config.armorBonus(player)
 		out.Health += def.Health or 0
 		out.Regen += def.Regen and def.Regen.Amount / def.Regen.Every or 0
 		out.Grow *= def.Grow or 1
+		out.MoveSpeed *= def.MoveSpeed or 1
 		out.Aura = math.max(out.Aura, def.Aura or 0)
 	end
 	for _, def in pairs(worn) do
@@ -294,7 +317,7 @@ end
 function Config.statOf(player, name)
 	return (player:GetAttribute("Stat_" .. name) or 0) + (Config.armorBonus(player).Stats[name] or 0)
 end
-Config.WeaponOrder = { "Sword", "Scythe", "CastellanMace", "GozenTachi", "OldBook", "DarkBook", "FoulDagger", "CaelenBlades" }
+Config.WeaponOrder = { "Sword", "Scythe", "CastellanMace", "GozenTachi", "OldBook", "PyralisFang", "DarkBook", "FoulDagger", "CaelenBlades" }
 function Config.weaponOf(player)
 	return Config.Weapons[player:GetAttribute("Weapon") or "Sword"] or Config.Weapons.Sword
 end
