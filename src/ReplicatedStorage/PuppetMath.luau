@@ -22,19 +22,24 @@ PM.KINDS = Roster.kinds
 function PM.dims(kind, s)
 	local k = PM.KINDS[kind] or PM.KINDS.Knight
 	local g, a = k.girth, k.arm
+	local leg = k.leg or 1 -- (an optional length multiplier for the legs: the hips and all above them are lifted by what it adds; the root stays where it is)
+	local up = (leg - 1) * 2.3 * s
 	return {
 		kind = kind,
 		s = s,
 		hunch = k.hunch,
 		twoHand = k.twoHand and k.twoHand * s or nil,
+		elbowOut = k.elbowOut, -- (elbows carried wide of the body: 0 as everyone else, ~1 well out)
+		walkRef = k.walkRef, -- (the speed, in its own body-lengths, it's fully walking at: 11 if not given)
+		cadence = k.cadence, -- (how fast its steps come for its speed: 0.55 if not given - higher, shorter quicker steps)
 		turnBend = k.turnBend, -- (bends into its turns: the Puppeteer sets ctx.bend from it)
 		limbs = k.limbs, -- (extra joints: wrists and toes, see PM.joints)
 		rootY = 3 * s, -- root part centre above the floor when standing
 		rootSize = Vector3.new(2, 2, 1) * s,
 		hipHeight = 2 * s,
-		hipsY = 2.75 * s,
+		hipsY = 2.75 * s + up,
 		hipsSize = Vector3.new(1.8 * g, 0.8, 0.95 * g) * s,
-		waistY = 3.1 * s,
+		waistY = 3.1 * s + up,
 		chestH = 1.7 * (k.torso or 1) * s, -- (torso: an optional length multiplier, e.g. the dog's long body)
 		chestSize = Vector3.new(2.0 * g, 1.7 * (k.torso or 1), 1.0 * g) * s,
 		headSize = Vector3.new(1.15, 1.25, 1.15) * s,
@@ -44,9 +49,9 @@ function PM.dims(kind, s)
 		lowerArm = 1.2 * a * s,
 		armW = 0.55 * g * s,
 		hipX = 0.5 * g * s,
-		hipJointY = 2.6 * s,
-		thigh = 1.2 * s,
-		shin = 1.1 * s,
+		hipJointY = 2.6 * s + up,
+		thigh = 1.2 * leg * s,
+		shin = 1.1 * leg * s,
 		legW = 0.62 * g * s,
 		ankleY = 0.3 * s,
 		footSize = Vector3.new(0.62 * g, 0.3, 1.05) * s,
@@ -116,6 +121,14 @@ PM.POSES = {
 	Roar = { drop = 0.1, lean = -0.55, head = -0.65, la1 = 2.4, la3 = -0.9, lel = 0.5, footR = 0.4, footL = -0.4, freeL = 0, rwr = -0.4, lwr = -0.8 },
 	Air = { drop = 0.2, lean = 0.35, tuck = 0.7, la1 = 0.6, la3 = -0.7, freeL = 0 },
 	Deflect = { drop = 0.25, lean = -0.05, twist = 0.18, head = 0.05, footR = 0.35, footL = -0.3, spread = 0.25, freeL = 0, la1 = 0.85, la3 = -0.4, lel = 0.9 },
+	-- turning round to something behind you, led by the head (the King's entrance): the head first, then the chest
+	-- and hips after it, then a step as the body comes round (L = turning to the left, R = to the right)
+	TurnLookL = { look = 1.0, twist = 0.12, head = -0.05 },
+	TurnTwistL = { look = 0.9, twist = 0.55, hip = 0.35, head = -0.05, footR = 0.25, footL = -0.05 },
+	TurnStepL = { look = 0.4, twist = 0.25, hip = 0.15, liftL = 0.35, footL = -0.3 },
+	TurnLookR = { look = -1.0, twist = -0.12, head = -0.05 },
+	TurnTwistR = { look = -0.9, twist = -0.55, hip = -0.35, head = -0.05, footR = 0.05, footL = -0.25 },
+	TurnStepR = { look = -0.4, twist = -0.25, hip = -0.15, lift = 0.35, footR = 0.3 },
 }
 
 for name, p in pairs(Roster.poses) do
@@ -224,7 +237,8 @@ function PM.solve(D, J, rootCF, P, ctx)
 		local target = (n == "R") and ctx.rightTarget or ctx.leftTarget
 		if target and not ctx.noIK then
 			local shoulderPos = (chestCF * Js.C0).Position
-			local pole = chestCF:VectorToWorldSpace(Vector3.new(sx * 0.8, -0.55, 0.6))
+			local wide = D.elbowOut or 0 -- (the elbow bent out toward the side, not down and back)
+			local pole = chestCF:VectorToWorldSpace(Vector3.new(sx * (0.8 + wide * 1.2), -0.55 + wide * 0.3, 0.6 - wide * 0.25))
 			local elbow, tip = twoBone(shoulderPos, target, D.upperArm, D.lowerArm, pole)
 			local J1 = frameAlong(shoulderPos, elbow - shoulderPos, chestRight)
 			C0[n .. "Shoulder"] = chestCF:Inverse() * J1
@@ -247,7 +261,7 @@ function PM.solve(D, J, rootCF, P, ctx)
 				a1, a2, a3, el = a1 + (B[1] - a1) * k, a2 + (B[2] - a2) * k, a3 + (B[3] - a3) * k, el + (B[4] - el) * k
 			end
 			local swing = (n == "L" and P.freeL or 1) * (1 - k) * walk * 0.55 * math.sin(phase + (n == "L" and 0 or math.pi))
-			local sC0 = Js.C0 * CFrame.Angles(a1 + swing, a2, a3)
+			local sC0 = Js.C0 * CFrame.Angles(a1 + swing, a2, a3 + sx * (D.elbowOut or 0) * 0.25) -- (and the arm opened out at the shoulder)
 			local eC0 = Je.C0 * CFrame.Angles(el + (1 - k) * walk * 0.25, 0, 0)
 			C0[n .. "Shoulder"] = sC0
 			C0[n .. "Elbow"] = eC0

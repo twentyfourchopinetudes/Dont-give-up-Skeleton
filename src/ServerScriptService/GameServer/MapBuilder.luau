@@ -15,6 +15,9 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Detail = require(script.Parent:WaitForChild("MapDetail"))
+local DecayedPalace = require(script.Parent:WaitForChild("DecayedPalace"))
+local GildedHeights = require(script.Parent:WaitForChild("GildedHeights"))
+local HeightsRuin = require(script.Parent:WaitForChild("HeightsRuin"))
 
 local MapBuilder = {}
 
@@ -70,6 +73,26 @@ local function box(x1, y1, z1, x2, y2, z2, material, color, name, parent)
 		Color = color or COL.Wall,
 		Parent = parent,
 	})
+end
+
+-- four walls round cf (their centre), size outside, t thick: a box with no top or bottom
+local function ring(cf, size, t, mat, color, name, parent, solid)
+	local w, h, d = size.X, size.Y, size.Z
+	for _, q in ipairs({ { 0, -(d - t) / 2, w, t }, { 0, (d - t) / 2, w, t }, { -(w - t) / 2, 0, t, d - 2 * t }, { (w - t) / 2, 0, t, d - 2 * t } }) do
+		part({ Name = name, Size = Vector3.new(q[3], h, q[4]), CFrame = cf * CFrame.new(q[1], 0, q[2]), Material = mat, Color = color, CanCollide = solid ~= false, Parent = parent })
+	end
+end
+-- a chest's body, hollow (a dark floor inside four walls), so an open lid shows into it. cf: on the ground, lock to -Z.
+-- straps: thin bands down its front and back at each x (not slabs through it)
+local function chestBody(cf, size, mat, color, name, parent, straps, strapMat, strapColor)
+	local t = 0.25
+	ring(cf * CFrame.new(0, size.Y / 2, 0), size, t, mat, color, name, parent)
+	part({ Name = name .. "Floor", Size = Vector3.new(size.X - 2 * t, 0.2, size.Z - 2 * t), CFrame = cf * CFrame.new(0, 0.1, 0), Material = mat, Color = color:Lerp(Color3.new(0, 0, 0), 0.6), Parent = parent })
+	for _, x in ipairs(straps or {}) do
+		for _, z in ipairs({ -1, 1 }) do
+			part({ Name = name .. "Band", Size = Vector3.new(0.3, size.Y + 0.1, 0.06), CFrame = cf * CFrame.new(x, size.Y / 2, z * (size.Z / 2 + 0.03)), Material = strapMat, Color = strapColor, CanCollide = false, Parent = parent })
+		end
+	end
 end
 
 local function stoneColor()
@@ -867,6 +890,7 @@ function MapBuilder.build()
 	table.clear(notes)
 
 	local info = {}
+	info.ChestBody = chestBody -- (init.server's armor chests are built with it too)
 
 	-----------------------------------------------------------------------
 	-- 1. CELL BLOCK  (x -19..19, z 0..120, ceiling 16)
@@ -1082,6 +1106,27 @@ function MapBuilder.build()
 	wallZ(40, 120, 150, 30)
 	wallZ(40, 162, 200, 30)
 	box(39, 11, 150, 41, 30, 162, MAT.Cobblestone, stoneColor(), "Wall") -- above tunnel mouth
+	-- the drain grate across the tunnel mouth, rusted fast. Wick (Mabel) knows the trick of it; once she's told
+	-- you (player attribute GrateUp, set at its prompt) it lifts for you alone (SoulsClient, tag "DrainGrate")
+	do
+		local g = Instance.new("Model")
+		g.Name = "DrainGrate"
+		g.Parent = map
+		pcall(function()
+			g.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+		end)
+		local iron, rust = Color3.fromRGB(42, 39, 36), Color3.fromRGB(84, 54, 36)
+		local block = part({ Name = "GrateBlock", Size = Vector3.new(0.6, 11, 12), CFrame = CFrame.new(41.5, 5.5, 156), Transparency = 1, Parent = g })
+		g.PrimaryPart = block
+		for z = 150.5, 161.6, 0.85 do
+			part({ Name = "GrateBar", Size = Vector3.new(0.3, 11, 0.3), CFrame = CFrame.new(41.5, 5.5, z), Material = MAT.CorrodedMetal, Color = iron:Lerp(rust, (z * 7) % 1 * 0.6), CanCollide = false, Parent = g })
+		end
+		for _, y in ipairs({ 0.4, 4, 7.6, 10.6 }) do
+			part({ Name = "GrateRail", Size = Vector3.new(0.45, 0.45, 12), CFrame = CFrame.new(41.5, y, 156), Material = MAT.CorrodedMetal, Color = rust, CanCollide = false, Parent = g })
+		end
+		CollectionService:AddTag(g, "DrainGrate")
+		info.DrainGrate = { Model = g, Prompt = prompt(block, "Lift", "Grate", 0, 9) }
+	end
 	do
 		-- west wall, with the doorway into the Usher's Walk (z 156..164, 12 high).
 		-- One colour for all three pieces keeps the random stream as it was.
@@ -1867,14 +1912,14 @@ function MapBuilder.build()
 		part({ Name = "Rug", Size = Vector3.new(7, 0.06, 5), CFrame = CFrame.new(39, 0.03, 111) * CFrame.Angles(0, 0.12, 0), Material = MAT.Fabric, Color = Color3.fromRGB(78, 34, 28), CanCollide = false })
 		part({ Name = "RugBorder", Size = Vector3.new(7.4, 0.05, 5.4), CFrame = CFrame.new(39, 0.02, 111) * CFrame.Angles(0, 0.12, 0), Material = MAT.Fabric, Color = Color3.fromRGB(56, 46, 30), CanCollide = false })
 		for _, cp in ipairs({ { 41.5, 0, 110.2, true }, { 44.6, 0, 110.4, false }, { 41.2, 0, 113.8, false }, { 45.8, 2.9, 115.8, true }, { 29.6, 2.7, 109, false }, { 29.6, 2.7, 111.5, true },
-			{ 29.6, 2.7, 114, false }, { 34, 0, 116, false }, { 35.2, 0, 116.2, false }, { 37, 0, 105.3, true }, { 31.5, 0, 103.5, false }, { 30, 0, 98, true } }) do
+			{ 29.6, 2.7, 114, false }, { 34, 0, 116, false }, { 35.2, 0, 116.2, false }, { 37, 0, 105.3, true }, { 31.5, 0, 103.5, false }, { 30, 0, 98, true }, { 32.4, 0, 93.6, true } }) do
 			candle(Vector3.new(cp[1], cp[2], cp[3]), cp[4])
 		end
 		-- a row of small skulls on the shelf, each with its own stub of candle
 		for i = 0, 2 do
 			part({ Name = "Skull", Shape = Enum.PartType.Ball, Size = Vector3.new(0.7, 0.7, 0.7), CFrame = CFrame.new(29.6, 3.05, 110.3 + i * 1.2), Material = MAT.SmoothPlastic, Color = COL.Bone, CanCollide = false })
 		end
-		-- chalk on the north wall: a horned giant, a kneeling hooded figure with a
+		-- chalk on the north wall: a faceless giant, a kneeling hooded figure with a
 		-- long blade, and a very small figure holding a light. Drawn by a child. Or not.
 		do
 			local chalk = Color3.fromRGB(196, 190, 174)
@@ -1882,9 +1927,9 @@ function MapBuilder.build()
 				local a, b = Vector3.new(x1, y1, 116.94), Vector3.new(x2, y2, 116.94)
 				part({ Name = "Chalk", Size = Vector3.new((b - a).Magnitude + 0.1, 0.09, 0.03), CFrame = CFrame.new((a + b) / 2) * CFrame.Angles(0, 0, math.atan2(y2 - y1, x2 - x1)), Material = MAT.SmoothPlastic, Color = chalk, Transparency = 0.2, CanCollide = false, CanQuery = false })
 			end
-			-- the Warden: big body, horns, a mace
+			-- the Warden: big body, a mace
 			line(31.5, 1.2, 33, 4.6); line(36, 1.2, 34.5, 4.6); line(33, 4.6, 34.5, 4.6); line(32.5, 4.6, 32.5, 6); line(35, 4.6, 35, 6); line(32.5, 6, 35, 6)
-			line(32.5, 6, 31.8, 7); line(35, 6, 35.7, 7); line(35, 4.4, 37, 5.6); line(37, 5.6, 37.2, 6.4)
+			line(35, 4.4, 37, 5.6); line(37, 5.6, 37.2, 6.4)
 			-- Oculast: kneeling, hooded, the scythe over her head
 			line(39, 1.2, 40.6, 1.2); line(40.6, 1.2, 40.2, 3); line(40.2, 3, 39.6, 3.8); line(39.6, 3.8, 40.4, 4.2); line(40.4, 4.2, 40.9, 3.4)
 			line(41.3, 1.1, 41.3, 5.2); line(41.3, 5.2, 39.9, 5.6)
@@ -1906,6 +1951,7 @@ function MapBuilder.build()
 	end
 	-- Wick sits on the crate, facing the passage you come in by
 	info.Wick = CFrame.lookAt(Vector3.new(43, 1.4, 112), Vector3.new(31, 1.4, 104))
+	info.WickDoor = Vector3.new(31, 0, 92) -- (out in the Upper Drain: she calls to you from here)
 
 	-----------------------------------------------------------------------
 	-- 11. THE RUINED TOWNSHIP (east through the arena's exit, once the Warden falls)
@@ -3687,7 +3733,7 @@ function MapBuilder.build()
 					local gate = Instance.new("Model")
 					gate.Name = "KeepGate"
 					gate.Parent = map
-					local collider = part({ Name = "GateCollider", Size = Vector3.new(6, 8, 0.6), CFrame = CFrame.new(-19, F1 + 4, 273.5), Transparency = 1, Parent = gate })
+					local collider = part({ Name = "GateCollider", Size = Vector3.new(6, 8, 2.4), CFrame = CFrame.new(-19, F1 + 4, 273.5), Transparency = 1, Parent = gate }) -- (deep: thin, a fast enough body goes through it)
 					for x = -21.6, -16.4, 0.8 do
 						part({ Name = "GateBar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(8, 0.36, 0.36), CFrame = CFrame.new(x, F1 + 4, 273.5) * CFrame.Angles(0, 0, math.pi / 2), Material = MAT.Metal, Color = iron, CanCollide = false, Parent = gate })
 					end
@@ -4256,6 +4302,7 @@ function MapBuilder.build()
 		do
 			local bg = Random.new(1609) -- (its own seed: the town's layout doesn't shift)
 			local centre = Vector3.new(80, 0, 220)
+			local crag = Random.new(1610) -- (its own too: bg's draws, and so where everything stands, don't change)
 			local function silhouette(name, size, cf, color)
 				-- (none where the encampment, its crossing and the far side, or the Weald and its
 				-- colosseum now stand: they'd show through them, visible but not solid)
@@ -4267,7 +4314,47 @@ function MapBuilder.build()
 						return
 					end
 				end
-				part({ Name = name, Size = size, CFrame = cf, Material = MAT.Slate, Color = color, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
+				local function piece(s, at, tint, mat)
+					part({ Name = name, Size = s, CFrame = cf * at, Material = mat, Color = tint, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
+				end
+				if name ~= "Mountain" then
+					piece(size, CFrame.new(), color, MAT.Slate)
+					return
+				end
+				-- a mountain: tilted slabs of rock in place of the one block, each shrunk until it's wholly inside that block, so
+				-- its outline breaks up but never leaves the space the block took; a core so nothing shows through; its tip kept
+				local function rockTint()
+					return color:Lerp(Color3.fromRGB(118, 118, 120), crag:NextNumber(0.3, 0.8))
+				end
+				piece(size * Vector3.new(0.76, 0.76, 0.5), CFrame.new(), color:Lerp(Color3.fromRGB(118, 118, 120), 0.3), MAT.Rock)
+				local tip = size.X * 0.1
+				piece(Vector3.new(tip, tip, size.Z * 0.5), CFrame.new((size.X - tip) / 2, (size.Y - tip) / 2, 0), rockTint(), MAT.Rock)
+				local GRID = 9
+				for i = 1, GRID do
+					for j = 1, GRID do
+						local s = size * Vector3.new(crag:NextNumber(0.13, 0.24), crag:NextNumber(0.13, 0.24), crag:NextNumber(0.5, 0.9))
+						local at = CFrame.new((i - crag:NextNumber(0.2, 0.8)) / GRID * size.X - size.X / 2, (j - crag:NextNumber(0.2, 0.8)) / GRID * size.Y - size.Y / 2, crag:NextNumber(-0.2, 0.2) * size.Z)
+							* CFrame.Angles(crag:NextNumber(-0.5, 0.5), crag:NextNumber(-0.5, 0.5), crag:NextNumber(-0.8, 0.8))
+						-- (none for what's buried, nor out in the block's two side corners, where they'd float off on their own)
+						local keep = (cf * at).Y > -20 and math.abs(at.X - at.Y) < 0.62 * size.X
+						for _ = 1, keep and 12 or 0 do
+							local inside = true
+							for _, sx in ipairs({ -0.5, 0.5 }) do
+								for _, sy in ipairs({ -0.5, 0.5 }) do
+									for _, sz in ipairs({ -0.5, 0.5 }) do
+										local p = at * Vector3.new(sx * s.X, sy * s.Y, sz * s.Z)
+										inside = inside and math.abs(p.X) <= size.X / 2 and math.abs(p.Y) <= size.Y / 2 and math.abs(p.Z) <= size.Z / 2
+									end
+								end
+							end
+							if inside then
+								piece(s, at, rockTint(), crag:NextNumber() < 0.6 and MAT.Rock or MAT.Slate)
+								break
+							end
+							s *= 0.86
+						end
+					end
+				end
 			end
 			for i = 1, 44 do
 				local a = (i + bg:NextNumber(-0.3, 0.3)) / 44 * math.pi * 2
@@ -5393,8 +5480,6 @@ function MapBuilder.build()
 			message(at3(-215, FL, -27), "A flask, left for whoever made it this far.")
 			message(at3(-194, G0, -80), "Ladder ahead. A way back up.")
 			message(at3(-238, FL, -64), "This door opens from here. A shortcut to the dormitory.")
-			message(at3(-205, FL, -28), "A great hall waits above.")
-
 			for _, l in ipairs({
 				{ -239, 12, -24 }, { -191, 12, -24 }, { -239, 12, -125 }, { -191, 12, -125 },
 				{ -264, 12, -48 }, { -264, 12, -110 }, { -166, 12, -50 }, { -166, 12, -118 }, { -221.5, 10, 0 }, { -208.5, 10, 0 },
@@ -6271,8 +6356,7 @@ function MapBuilder.build()
 							candles(CFrame.new(at3(-178, y + 3.06, z)), 3, 0.7)
 						end
 					end
-					-- the landing: HER SHRINE, against its east wall - Ossaria, "my star", kept in candles and dead roses, and
-					-- what he wrote round her
+					-- the landing: HER SHRINE, against its east wall - Ossaria, "my star", kept in candles and dead roses
 					do
 						local sz
 						for _, z in ipairs({ -24, -19, -29 }) do
@@ -6306,9 +6390,6 @@ function MapBuilder.build()
 							for _ = 1, 4 do -- his letters to her
 								P(out(cf, R(-1.8, 1.8), 3.09, R(0.4, 1.7)) * CFrame.Angles(0, R(-0.6, 0.6), 0), "Letter", Vector3.new(0.8, 0.02, 1.1), Color3.fromRGB(160, 150, 124), MAT.SmoothPlastic)
 							end
-							scrawl(cf, 12.2, "FORGIVE ME", 6, 1.2, 0, 2)
-							scrawl(cf, 7.6, "forgive me\nforgive me\nforgive me\nforgive me", 1.9, 5, -3.7, 2)
-							scrawl(cf, 7.6, "my star\nmy star\nmy star\nmy star", 1.9, 5, 3.7, 2)
 						end
 					end
 				end)()
@@ -7127,9 +7208,9 @@ function MapBuilder.build()
 		}) do
 			shack(s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8])
 		end
-		-- Wretch Giles (Characters/Taylor) sits in the doored shack's back corner, facing the room
+		-- Wretch Giles (Characters/Taylor) sits just inside the doored shack's doorway, framed in it, looking out at the walkway
 		local gilesShack = CFrame.new(256, LEDGE_Y + 2.5, 530) * CFrame.Angles(0, 0.25, 0)
-		info.Taylor = CFrame.lookAt(gilesShack * Vector3.new(-3.1, 0, 2.7), gilesShack * Vector3.new(0, 0, -2))
+		info.Taylor = CFrame.lookAt(gilesShack * Vector3.new(0, 0, -1.6), gilesShack * Vector3.new(0, 0, -10))
 
 		-- MALFORMED WOODWORK: everything else here is timber gone wrong. None of it can be
 		-- reached: decks stand well over head height, nothing climbs to them, and all of it
@@ -7703,9 +7784,9 @@ function MapBuilder.build()
 				er = crossEr
 			end
 
-			-- THE WEALD: out of the west tunnel (once the brushwood's burnt) into a wooded valley
+			-- THE WEALD (its banner: the Vale of Errants): out of the west tunnel (once the brushwood's burnt) into a wooded valley
 			-- walled in by mountains, a dirt track winding west through the trees (a good fifteen
-			-- seconds' walk) to THE CROWNED COLOSSEUM: a grand, well-kept arena of pale stone,
+			-- seconds' walk) to THE COLOSSEUM (no banner of its own): a grand, well-kept arena of pale stone,
 			-- ringed by three staggered rows of columns (from inside you can't see out, from
 			-- outside you can't see in, until you've threaded through them), its roofed
 			-- colonnade carrying a mountain - a great funnel of rock flaring up off its top, open
@@ -7766,10 +7847,9 @@ function MapBuilder.build()
 						Gaps = { RAMPGAP }, Highland = HL,
 					Avoid = { { C.X, C.Z, 66 } }, -- (no lumps or stones on the colosseum's ground)
 					Mats = { Enum.Material.LeafyGrass, Enum.Material.Grass, Enum.Material.Ground, Enum.Material.Mud },
-					Funnel = { Centre = C, Base = Y + 27.2, Radius = 54, Height = 68 },
+					Funnel = { Centre = C, Base = Y + 27.2, Radius = 54, Height = 86.8, Top = 140, Rim = 128 }, -- (Top, Rim: the flat land on it, GildedHeights; Top a whole voxel)
 				}
-				table.insert(info.Zones, 1, { Name = "The Crowned Colosseum", MinX = C.X - 63, MaxX = C.X + 63, MinZ = C.Z - 63, MaxZ = C.Z + 63 })
-				table.insert(info.Zones, { Name = "The Weald", MinX = -201, MaxX = 113, MinZ = 429, MaxZ = 611 })
+				table.insert(info.Zones, { Name = "Vale of Errants", MinX = -201, MaxX = 113, MinZ = 429, MaxZ = 611 }) -- (the colosseum in it has no name of its own)
 
 				local function toPath(p) -- how far p is from the track
 					local best = math.huge
@@ -7928,8 +8008,8 @@ function MapBuilder.build()
 						local cf = CFrame.lookAt(cpos, cpos + u)
 						part({ Name = "HutPlinth", Size = Vector3.new(5, 0.9, 3.6), CFrame = cf * CFrame.new(0, -0.45, 0), Material = MAT.Slate, Color = Color3.fromRGB(58, 56, 52) })
 						local wood, iron = Color3.fromRGB(96, 70, 48), Color3.fromRGB(46, 42, 38)
-						part({ Name = "HutChest", Size = Vector3.new(3.6, 2.0, 2.2), CFrame = cf * CFrame.new(0, 1.0, 0), Material = MAT.WoodPlanks, Color = wood })
-						part({ Name = "HutChestBand", Size = Vector3.new(3.65, 0.25, 2.25), CFrame = cf * CFrame.new(0, 1.4, 0), Material = MAT.Metal, Color = iron, CanCollide = false })
+						chestBody(cf, Vector3.new(3.6, 2.0, 2.2), MAT.WoodPlanks, wood, "HutChest")
+						ring(cf * CFrame.new(0, 1.4, 0), Vector3.new(3.65, 0.25, 2.25), 0.27, MAT.Metal, iron, "HutChestBand", nil, false)
 						part({ Name = "HutChestLock", Size = Vector3.new(0.4, 0.45, 0.1), CFrame = cf * CFrame.new(0, 1.7, -1.15), Material = MAT.Metal, Color = Color3.fromRGB(196, 160, 80), CanCollide = false })
 						local lid = part({ Name = "HutChestLid", Size = Vector3.new(3.65, 0.4, 2.25), CFrame = cf * CFrame.new(0, 2.2, 0), Material = MAT.WoodPlanks, Color = wood })
 						table.insert(info.MushroomChests, { Lid = lid, Hinge = cf * CFrame.new(0, 2.4, 1.1), Item = item, Prompt = prompt(lid, "Open", "Chest", 0.5, 7) })
@@ -8127,6 +8207,12 @@ function MapBuilder.build()
 				-- paving out to meet the track
 				for x = C.X + 63, C.X + 76, 3.2 do
 					part({ Name = "Paving", Size = Vector3.new(3.1, 0.6, 9), CFrame = CFrame.new(x, Y + 0.3, C.Z + wn(-0.3, 0.3)) * CFrame.Angles(0, wn(-0.03, 0.03), 0), Material = MAT.Slate, Color = MARBLE_DARK:Lerp(Color3.fromRGB(90, 96, 80), wn(0, 0.4)) })
+				end
+				-- the grand gate in the north wall, just out of the tunnel, and the decayed land past it (DecayedPalace):
+				-- its ground and outline now, for the terrain pass; the rest is built last
+				local ok, err = pcall(DecayedPalace.plan, { part = part, box = box, info = info, map = map })
+				if not ok then
+					warn("[DGUS] DecayedPalace.plan: " .. tostring(err))
 				end
 			end
 
@@ -8419,12 +8505,14 @@ function MapBuilder.build()
 		terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(62, 70, 46))
 		local function valley(F, seed)
 			local fr = Random.new(seed) -- (its own stream)
-			local function toFloor(x, z) -- how far (x, z) is from the nearest bit of valley floor
+			local function toFloor(x, z) -- how far (x, z) is from the nearest bit of valley floor (or of F.Keep: others' floors)
 				local best = math.huge
-				for _, q in ipairs(F.Rects) do
-					local dx = math.max(q[1] - x, 0, x - q[3])
-					local dz = math.max(q[2] - z, 0, z - q[4])
-					best = math.min(best, math.sqrt(dx * dx + dz * dz))
+				for _, list in ipairs({ F.Rects, F.Keep or {} }) do
+					for _, q in ipairs(list) do
+						local dx = math.max(q[1] - x, 0, x - q[3])
+						local dz = math.max(q[2] - z, 0, z - q[4])
+						best = math.min(best, math.sqrt(dx * dx + dz * dz))
+					end
 				end
 				return best
 			end
@@ -8507,6 +8595,9 @@ function MapBuilder.build()
 		valley(F, 6060)
 		local W = info.Wilds
 		valley(W, 6070)
+		if info.Decayed then -- (the dead wood, town and palace past the grand gate: DecayedPalace)
+			valley(info.Decayed, 6100)
+		end
 		-- nothing of the ground under the colosseum's paving (snapped out to whole voxels)
 		do
 			local K = W.Clear
@@ -8524,12 +8615,14 @@ function MapBuilder.build()
 		-- as it climbs, open to the sky in the middle, jagged round its lip
 		do
 			local Fn = W.Funnel
+			info.HeightsRock = info.HeightsRock or {}
+			local terrain = HeightsRuin.record(terrain, info.HeightsRock) -- (its rock, logged: Ossaria's slash empties it)
 			local fr = Random.new(6080)
 			local rings = 14
 			for i = 0, rings do
 				local t = i / rings
 				local br = 8 + 4 * t
-				local rc = Fn.Radius + 26 * t ^ 2 -- (steep, flaring near the lip: it overhangs only its own colosseum)
+				local rc = Fn.Radius + 56 * t ^ 2 -- (steep, flaring near the lip out to the land on its top; its biggest rocks stay behind the rim skirt)
 				local y = Fn.Base + br * 0.7 + t * (Fn.Height - br * 1.4)
 				local count = math.ceil(math.pi * 2 * rc / (br * 0.9))
 				for k = 1, count do
@@ -8539,12 +8632,16 @@ function MapBuilder.build()
 					terrain:FillBall(Vector3.new(Fn.Centre.X + math.cos(a) * rc, y + fr:NextNumber(-1.5, 1.5), Fn.Centre.Z + math.sin(a) * rc), r, mat)
 				end
 			end
-			for k = 1, 22 do -- crags round the lip, leaning out
+			for k = 1, 22 do -- crags hanging under the lip, leaning out
 				local a = k / 22 * math.pi * 2 + fr:NextNumber(-0.1, 0.1)
-				local rc = Fn.Radius + 26 + fr:NextNumber(-4, 4)
+				local rc = Fn.Radius + 52 + fr:NextNumber(-4, 4)
 				local h = fr:NextNumber(10, 24)
-				terrain:FillBlock(CFrame.new(Fn.Centre.X + math.cos(a) * rc, Fn.Base + Fn.Height + h * 0.3, Fn.Centre.Z + math.sin(a) * rc) * CFrame.Angles(0, -a, 0) * CFrame.Angles(0, 0, fr:NextNumber(-0.5, -0.2)), Vector3.new(fr:NextNumber(5, 9), h, fr:NextNumber(5, 8)), Enum.Material.Basalt)
+				terrain:FillBlock(CFrame.new(Fn.Centre.X + math.cos(a) * rc, Fn.Top - 16 - h * 0.3, Fn.Centre.Z + math.sin(a) * rc) * CFrame.Angles(0, -a, 0) * CFrame.Angles(0, 0, fr:NextNumber(-0.5, -0.2)), Vector3.new(fr:NextNumber(5, 9), h, fr:NextNumber(5, 8)), Enum.Material.Basalt)
 			end
+			-- the flat land on top (GildedHeights paves it, a voxel up: smoothed terrain's surface would show through at Top), and
+			-- nothing of any mountain above it
+			terrain:FillCylinder(CFrame.new(Fn.Centre.X, Fn.Top - 12, Fn.Centre.Z), 16, Fn.Rim - 4, Enum.Material.Rock)
+			terrain:FillCylinder(CFrame.new(Fn.Centre.X, Fn.Top + 56, Fn.Centre.Z), 120, Fn.Rim + 6, Enum.Material.Air)
 			-- its lowest rocks hang below the roof into the colonnade, and over the parapet the
 			-- Champion perches on: none under the roof, and none inside the parapet's walk
 			local K = W.Clear
@@ -8702,6 +8799,145 @@ function MapBuilder.build()
 			terrain:FillBlock(CFrame.new(-214, (gy + P.Top + 12) / 2, -4), Vector3.new(36, P.Top + 12 - gy, 16), Enum.Material.Air) -- x -232..-196, z -12..4
 			terrain:FillBlock(CFrame.new(-216, P.Top + 20, 40), Vector3.new(48, 40, 64), Enum.Material.Air) -- and the great door's approach
 		end
+		-- THE FAR RANGE: plain grey mountains, snow on top, round the whole map and outside everything in it. A height field
+		-- (ridged noise), written only as a shell over each column: nothing inside INNER is touched but void outside the
+		-- bedrock, which gets a floor at the bedrock's level. Materials none of the map's terrain uses, so their colours are free.
+		-- (FX, FZ, INNER: the furthest of the map is the Pyralis peaks' north-east corner, ~807 out; the Decayed walls ~789.)
+		do
+			terrain:SetMaterialColor(Enum.Material.Limestone, Color3.fromRGB(124, 126, 130))
+			terrain:SetMaterialColor(Enum.Material.Sandstone, Color3.fromRGB(114, 116, 120))
+			terrain:SetMaterialColor(Enum.Material.Snow, Color3.fromRGB(232, 234, 240))
+			local FX, FZ, INNER, OUTER, CHUNK = 175, 225, 830, 1900, 128
+			local function smooth(t)
+				t = math.clamp(t, 0, 1)
+				return t * t * (3 - 2 * t)
+			end
+			-- terrain can't opt out of shadows, and the sun's low (ClockTime 6.9): measured in play, a block 680 from the camera
+			-- casts none on it, but the ring's slopes nearer than that put the whole east of the map in the dark. So on the sun's
+			-- side the peaks start past that reach of anywhere you can stand (~720 from FX, FZ), with low hills up to them.
+			local SUN_REACH = 1400 - INNER
+			local SUN_X, SUN_Z = 0.947, 0.321 -- (Lighting:GetSunDirection() at 6.9, flat)
+			-- THE FOOTHILLS: medium mountains filling the moat between the map's own mountains and the far ring, their peaks climbing
+			-- outward until they're nearly the ring's height. They start just past the map's edge on each bearing:
+			-- shortcut: KEEP was measured from the built map (the outermost terrain or part in each 15 degree slice from 7.5), so re-measure it if the map grows outward.
+			local KEEP = { 684, 713, 732, 655, 588, 602, 660, 708, 699, 652, 652, 684, 684, 758, 690, 724, 588, 590, 593, 568, 543, 579, 693, 698 }
+			local keep = {}
+			for i = 1, 24 do -- (the largest of it and its neighbours, plus a margin: interpolating between slices never cuts into the map)
+				keep[i] = math.max(KEEP[i], KEEP[i % 24 + 1], KEEP[(i - 2) % 24 + 1]) + 20
+			end
+			local SUN_SLOPE, STAND = 0.2, 760 -- (the low sun's fall per stud, a little under its true 0.227; how far out from FX, FZ anything's stood on)
+			local function foothill(x, z, dx, dz, r, shift)
+				local b = ((math.deg(math.atan2(dz, dx)) - 7.5) % 360) / 15
+				local i = math.floor(b)
+				local from = keep[i + 1] + (keep[(i + 1) % 24 + 1] - keep[i + 1]) * (b - i)
+				if r <= from then
+					return nil
+				end
+				local f, amp, sum, weight = 1 / 330, 1, 0, 1
+				for o = 1, 5 do
+					local n = math.max(0, 1 - 2 * math.abs(math.noise(x * f + 41.7, z * f + 23.9, o * 6.1)))
+					local signal = n * n * weight
+					sum += signal * amp
+					weight = math.clamp(signal * 2, 0, 1)
+					f, amp = f * 2, amp * 0.5
+				end
+				local peak = (170 + 600 * math.clamp((r - from) / (INNER + shift + 490 - from), 0, 1)) * smooth((r - from) / 70) * smooth((INNER + shift + 890 - r) / 300)
+				-- on the sun's side nothing may shadow the map's floors: under a line a little below the sun's rays through the map's middle (its outer flanks can shade), until
+				-- it's past the reach of the shadow pass (see SUN_REACH), and then free to climb
+				local along, across = dx * SUN_X + dz * SUN_Z, math.abs(dz * SUN_X - dx * SUN_Z)
+				if along > 0 and across < STAND then
+					local past = along - math.sqrt(STAND * STAND - across * across)
+					peak = math.min(peak, along * SUN_SLOPE + smooth((past - 660) / 150) * peak + smooth((across - 620) / 140) * peak)
+				end
+				return FLOOR + peak * (0.4 + 0.25 * math.noise(x / 150 + 9.2, z / 150 + 4.4, 1.5) + 0.6 * (sum / 1.94) ^ 1.4) -- (0.4: the valleys between ridges climb too, or the moat's still there; 1.94: the most sum can be, so only the ridge lines come near the peak height and nothing's flat-topped)
+			end
+			local function farHeight(x, z) -- (nil: leave this column alone)
+				local dx, dz = x - FX, z - FZ
+				local r = math.sqrt(dx * dx + dz * dz)
+				local sunward = smooth((dx * SUN_X + dz * SUN_Z) / 200) * smooth((920 - math.abs(dz * SUN_X - dx * SUN_Z)) / 200)
+				local shift = SUN_REACH * sunward
+				local outer = OUTER + shift
+				if r >= outer then
+					return nil
+				end
+				local hill = foothill(x, z, dx, dz, r, shift)
+				if r < INNER then
+					local onBedrock = x > centre.X - span / 2 and x < centre.X + span / 2 and z > centre.Z - span / 2 and z < centre.Z + span / 2
+					return hill or (not onBedrock and FLOOR or nil)
+				end
+				local t = (r - INNER - shift) / (OUTER - INNER)
+				local env = smooth(t / 0.45) * smooth((1 - t) / 0.3)
+				local f, amp, sum, weight = 1 / 700, 1, 0, 1
+				for o = 1, 6 do
+					local n = math.max(0, 1 - 2 * math.abs(math.noise(x * f + 17.3, z * f - 5.1, o * 9.7)))
+					local signal = n * n * weight
+					sum += signal * amp
+					weight = math.clamp(signal * 2, 0, 1)
+					f, amp = f * 2, amp * 0.5
+				end
+				local mass = 0.55 + 0.45 * math.noise(x / 1100 + 3.1, z / 1100 + 8.7, 0.5)
+				local hills = 0.11 * math.min(r - INNER, SUN_REACH) * sunward * sum * smooth((outer - r) / 300)
+				return math.max(hill or FLOOR, FLOOR + hills + env * (140 + mass * sum * (620 + 380 * sunward))) -- (taller where they stand further off)
+			end
+			local function farMaterial(x, z, h, slope)
+				if h > 400 + 90 * math.noise(x / 240 + 0.3, z / 240 + 0.7, 2.5) and slope < 2.5 then
+					return Enum.Material.Snow
+				elseif h < 90 and slope < 0.8 then
+					return Enum.Material.Grass
+				end
+				return math.noise(x / 300 + 0.1, h / 30 + 0.2, z / 300 + 0.4) > 0 and Enum.Material.Limestone or Enum.Material.Sandstone -- (strata)
+			end
+			task.spawn(function() -- (well outside the map, so nothing waits on it)
+				local far = OUTER + SUN_REACH
+				local x1, z1 = math.floor((FX - far) / CHUNK) * CHUNK, math.floor((FZ - far) / CHUNK) * CHUNK
+				local n = CHUNK / 4
+				for x0 = x1, FX + far, CHUNK do
+					for z0 = z1, FZ + far, CHUNK do
+						local hs, lo, hi = {}, math.huge, -math.huge
+						for i = 0, n + 1 do -- (a column's neighbours too: the shell goes down to the lowest of them)
+							hs[i] = {}
+							for k = 0, n + 1 do
+								hs[i][k] = farHeight(x0 + 4 * i - 2, z0 + 4 * k - 2)
+							end
+						end
+						local function drop(i, k) -- (the shell's bottom, and how far the steepest side falls)
+							local h = hs[i][k]
+							local low = math.min(h, hs[i - 1][k] or h, hs[i + 1][k] or h, hs[i][k - 1] or h, hs[i][k + 1] or h)
+							return low - 8, h - low
+						end
+						for i = 1, n do
+							for k = 1, n do
+								if hs[i][k] then
+									lo, hi = math.min(lo, (drop(i, k))), math.max(hi, hs[i][k])
+								end
+							end
+						end
+						if hi > -math.huge then
+							local y0, y1 = math.floor(lo / 4) * 4, math.ceil(hi / 4) * 4 + 4
+							local reg = Region3.new(Vector3.new(x0, y0, z0), Vector3.new(x0 + CHUNK, y1, z0 + CHUNK))
+							local mats, occ = terrain:ReadVoxels(reg, 4) -- (read first: whatever's here already stays)
+							for i = 1, n do
+								for k = 1, n do
+									local h = hs[i][k]
+									if h then
+										local bottom, fall = drop(i, k)
+										local mat = h == FLOOR and Enum.Material.Slate or farMaterial(x0 + 4 * i - 2, z0 + 4 * k - 2, h, fall / 4)
+										for j = 1, (y1 - y0) / 4 do
+											local y = y0 + 4 * (j - 1)
+											if y < h and y + 4 > bottom then
+												mats[i][j][k], occ[i][j][k] = mat, math.clamp((h - y) / 4, 0, 1)
+											end
+										end
+									end
+								end
+							end
+							terrain:WriteVoxels(reg, 4, mats, occ)
+							task.wait()
+						end
+					end
+				end
+			end)
+		end
 	end
 
 	-----------------------------------------------------------------------
@@ -8740,11 +8976,12 @@ function MapBuilder.build()
 		B(88, -8, -25, 92, RY, 181, "WingOuter")
 		-- the east block's west side: it jogs out round the curtain wall's round tower (x 48.5..59.5, z 112.5..123.5),
 		-- which stays whole outside it, and leaves the sewer's mouth (z 149.5..161.5, y 0..12) open
-		B(56, -8, 105, 58, RY, 108, "WingOuter")
-		B(56, -8, 108, 61.5, RY, 110, "WingOuter")
-		B(59.5, -8, 110, 61.5, RY, 126, "WingOuter")
-		B(56, -8, 126, 61.5, RY, 128, "WingOuter")
-		B(56, -8, 128, 58, RY, 149.5, "WingOuter")
+		-- (these stand on the sewer's ceiling - y 6 over the North Run, 11 over the ramp and outflow - not down through it)
+		B(56, 6, 105, 58, RY, 108, "WingOuter")
+		B(56, 6, 108, 61.5, RY, 110, "WingOuter")
+		B(59.5, 11, 110, 61.5, RY, 126, "WingOuter")
+		B(56, 11, 126, 61.5, RY, 128, "WingOuter")
+		B(56, 11, 128, 58, RY, 149.5, "WingOuter")
 		B(56, -8, 149.5, 58, 0, 161.5, "WingOuter")
 		B(56, 12, 149.5, 58, RY, 161.5, "WingOuter")
 		B(56, -8, 161.5, 58, RY, 181, "WingOuter")
@@ -10330,10 +10567,7 @@ function MapBuilder.build()
 				-- (opened as the mushroom huts' are, init.server: the Armor of a Lion Hunter inside). No R(): the room's stream stays put
 				local cf = CFrame.lookAt(Vector3.new(140, FY, 117), Vector3.new(140, FY, 100))
 				local iron, char = Color3.fromRGB(40, 36, 34), Color3.fromRGB(34, 22, 18)
-				part({ Name = "BlazeChest", Size = Vector3.new(4, 2.2, 2.4), CFrame = cf * CFrame.new(0, 1.1, 0), Material = MAT.CrackedLava, Color = char, Parent = under })
-				for _, x in ipairs({ -1.5, 0, 1.5 }) do
-					part({ Name = "BlazeChestBand", Size = Vector3.new(0.3, 2.3, 2.5), CFrame = cf * CFrame.new(x, 1.1, 0), Material = MAT.Metal, Color = iron, CanCollide = false, Parent = under })
-				end
+				chestBody(cf, Vector3.new(4, 2.2, 2.4), MAT.CrackedLava, char, "BlazeChest", under, { -1.5, 0, 1.5 }, MAT.Metal, iron)
 				part({ Name = "BlazeChestLock", Size = Vector3.new(0.5, 0.55, 0.12), CFrame = cf * CFrame.new(0, 1.8, -1.25), Material = MAT.Metal, Color = Color3.fromRGB(196, 150, 70), CanCollide = false, Parent = under })
 				local lid = part({ Name = "BlazeChestLid", Size = Vector3.new(4.05, 0.45, 2.45), CFrame = cf * CFrame.new(0, 2.42, 0), Material = MAT.CrackedLava, Color = char, Parent = under })
 				lit(blaze(140, FY + 3.4, 117, 4), EMBER, 22, 1.6)
@@ -10562,7 +10796,7 @@ function MapBuilder.build()
 				table.insert(info.Zones, 1, { Name = "Maw of Pyralis", MinX = 196, MaxX = 316, MinZ = 60, MaxZ = 236, MinY = FY - 12, MaxY = AT + 4 }) -- (the way east and the arena)
 				info.Underfire.Arena = { MinX = 208, MaxX = 304, MinZ = 128, MaxZ = 224, Centre = Vector3.new(CX, FY, CZ), Door = Vector3.new(270, FY, 119), Pillars = pillars, Spires = spires } -- (the island; for the boss to come)
 				-- the arena's gates, the lair's door, the run and the great lift beyond it, and PYRALIS BULWARK above (its own file)
-				require(script.Parent:WaitForChild("PyralisBulwark")).build({ part = part, box = box, prompt = prompt, addFlicker = addFlicker, info = info, map = map, under = under, FY = FY })
+				require(script.Parent:WaitForChild("PyralisBulwark")).build({ bonfire = makeBonfire, part = part, box = box, prompt = prompt, addFlicker = addFlicker, info = info, map = map, under = under, FY = FY })
 			end
 			table.insert(info.Zones, 1, { Name = "Maw of Pyralis", MinX = 118, MaxX = 166, MinZ = 34, MaxZ = 124, MinY = FY - 12, MaxY = PH + 10 }) -- (the way west)
 		end
@@ -10638,10 +10872,37 @@ function MapBuilder.build()
 			lp("DoorCrossbar", Vector3.new(0.5, 0.4, 5.9), Vector3.new(0, y, 3), COL.Iron, MAT.Metal)
 		end
 		lp("DoorLock", Vector3.new(0.9, 1.1, 1.0), Vector3.new(-0.2, 4.6, 5.0), COL.Rust, MAT.Metal)
+		-- (the doorway filled, wall-deep, by an unseen block till the door's opened: the bars alone are too thin to stop a
+		-- body at a dash's speed, which goes clean through them)
+		local stop = part({ Name = "FallenDoorStop", Size = Vector3.new(2.6, 9.4, 6), CFrame = CFrame.new(-19, 4.7, 55), Transparency = 1, CanQuery = false, CanTouch = false, CastShadow = false, Parent = wing })
 		local openSpot = part({ Name = "FallenDoorSpot", Size = Vector3.new(1, 1, 1), CFrame = CFrame.new(-23, 3, 55), Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, Parent = wing })
 		local lockedSpot = part({ Name = "FallenDoorLockedSpot", Size = Vector3.new(1, 1, 1), CFrame = CFrame.new(-16, 3, 55), Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, Parent = wing })
 		info.FallenStairDev = CFrame.lookAt(Vector3.new(-40.5, 33.2, 68), Vector3.new(-40.5, 33.2, 80)) -- (dev teleport: the top of the stair down to the door's hallway)
-		info.FallenDoor = { Leaf = leaf, Hinge = hingeCF, Prompt = prompt(openSpot, "Open", "Heavy Door", 0.4, 4), LockedPrompt = prompt(lockedSpot, "Open", "Heavy Door", 0, 7) }
+		info.FallenDoor = { Leaf = leaf, Hinge = hingeCF, Stop = stop, Prompt = prompt(openSpot, "Open", "Heavy Door", 0.4, 4), LockedPrompt = prompt(lockedSpot, "Open", "Heavy Door", 0, 7) }
+	end
+
+	do -- the grand gate, and the decayed land past it (its own file; the palace in it is cloned from Pyralis's)
+		local t1 = os.clock()
+		local ok, err = pcall(DecayedPalace.build, { part = part, box = box, info = info, map = map })
+		if not ok then
+			warn("[DGUS] DecayedPalace.build: " .. tostring(err))
+		end
+		print(string.format("[DGUS] map: the Decayed Palace (%.2fs)", os.clock() - t1))
+	end
+
+	do -- the kingdom on the colosseum's mountain (its own file)
+		local t1 = os.clock()
+		local ok, err = pcall(GildedHeights.build, { part = part, prompt = prompt, bonfire = makeBonfire, info = info, map = map })
+		if not ok then
+			warn("[DGUS] GildedHeights.build: " .. tostring(err))
+		end
+		print(string.format("[DGUS] map: the Gilded Heights (%.2fs)", os.clock() - t1))
+	end
+	-- Ossaria's bonfire, where she waits in the Rotted Court: after every other (a save knows bonfires by their order),
+	-- and hidden till she's gone (GameServer/Ossaria)
+	if info.OssariaPit then
+		local s = info.OssariaPit.Spot
+		info.OssariaPit.Bonfire = makeBonfire(s, CFrame.lookAt(s + Vector3.new(4.5, 3.2, 0), s + Vector3.new(0, 3.2, 0)), "The Rotted Court")
 	end
 
 	local t0 = os.clock()

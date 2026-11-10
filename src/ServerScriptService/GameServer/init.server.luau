@@ -12,10 +12,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local StarterPlayer = game:GetService("StarterPlayer")
+local TweenService = game:GetService("TweenService")
 
 local Core = require(script:WaitForChild("Core")) -- (builds the level)
 local Enemies = require(script:WaitForChild("Enemies"))
 local Config, P, Map, FxRemote, ActionRemote = Core.Config, Core.P, Core.Map, Core.FxRemote, Core.ActionRemote
+-- (single-player: the server's one player is the world's owner, and it's their save - GameServer/Save. Each one-time
+-- event below is Save.mark-ed when it happens and replayed from Save.on when the save is loaded, at "go")
+local Save = Core.Save
+-- THE DEV MENU (K) is the game's owner's (and anyone's in Studio): the "Dev" attribute, set on joining. Anyone else gets
+-- it by typing DEV_CODE and then K (the client sends its last few keys; the code lives here, out of the clients' reach).
+-- Config.Debug off: nobody has it.
+local DEV_CODE = "k3k3k"
+local function isDev(player)
+	return Config.Debug and player:GetAttribute("Dev") == true
+end
 local Roster, RigBuilder = Core.Roster, Core.RigBuilder
 local dressArmor -- (defined with the helm, below)
 local states, aliveChar, playSound, SOUNDS, makeCorpse = Core.states, Core.aliveChar, Core.playSound, Core.SOUNDS, Core.makeCorpse
@@ -138,7 +149,7 @@ ActionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3)
 			player:SetAttribute("Splinters", n - 1)
 			player:SetAttribute("Stat_" .. arg, Core.stat(player, arg) + 1)
 		end
-	elseif action == "DevGiveAll" and Config.Debug then
+	elseif action == "DevGiveAll" and isDev(player) then
 		-- every weapon and every piece of armor, to pick from in the menu (I)
 		for key in pairs(Config.Weapons) do
 			player:SetAttribute("Has_" .. key, true)
@@ -146,9 +157,9 @@ ActionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3)
 		for key in pairs(Config.Armor) do
 			player:SetAttribute(key, true)
 		end
-	elseif action == "DevSplinters" and Config.Debug then
+	elseif action == "DevSplinters" and isDev(player) then
 		player:SetAttribute("Splinters", (player:GetAttribute("Splinters") or 0) + 10)
-	elseif action == "DevGive" and Config.Debug and typeof(arg) == "string" and Config.Weapons[arg] then
+	elseif action == "DevGive" and isDev(player) and typeof(arg) == "string" and Config.Weapons[arg] then
 		player:SetAttribute("Has_" .. arg, true)
 		Core.equipWeapon(player, arg)
 	elseif action == "Attack" and (arg == "Light" or arg == "Heavy" or arg == "Running") and not (arg == "Light" and Config.weaponOf(player).NoLight) then
@@ -178,6 +189,10 @@ ActionRemote.OnServerEvent:Connect(function(player, action, arg, arg2, arg3)
 		local st = states[player]
 		if st then
 			st.sprinting = arg == true
+		end
+	elseif action == "ResetGame" then -- (the equipment menu's, and the dev menu's: everything wiped, a new game)
+		if not Save.reset(player) then
+			FxRemote:FireClient(player, "Message", "Your progress couldn't be reset just now. Try again in a moment.")
 		end
 	end
 end)
@@ -307,22 +322,24 @@ local function restAt(player, bf, i, first, silent)
 	Enemies.respawn()
 	Oculast.reset()
 end
+local function lightBonfire(bf)
+	bf.Lit = true
+	bf.Fire.Enabled = true
+	bf.Light.Enabled = true
+	bf.Glow.Enabled = false
+	bf.Sparks.Rate = 6
+	bf.Prompt.ActionText = "Rest"
+end
 for i, bf in ipairs(Map.Bonfires) do
-	local lit = false
 	bf.Prompt.Triggered:Connect(function(player)
 		local st = states[player]
 		local char = aliveChar(player)
 		if not (st and char) then
 			return
 		end
-		local first = not lit
+		local first = not bf.Lit
 		if first then
-			lit = true
-			bf.Fire.Enabled = true
-			bf.Light.Enabled = true
-			bf.Glow.Enabled = false
-			bf.Sparks.Rate = 6
-			bf.Prompt.ActionText = "Rest"
+			lightBonfire(bf)
 		end
 		restAt(player, bf, i, first)
 	end)
@@ -331,15 +348,16 @@ end
 -- the prison wing's portcullis (MapBuilder section 10): sealed until the Consul's spell breaks (the same
 -- moment bonfire travel opens, ReplicatedStorage "BonfireTravel"), then it lifts for good
 do
-	local G, open = Map.PrisonGate, false
+	local G, open = Map.PrisonGate, false -- (and it's back up with the save: the Consul's fall sets BonfireTravel again)
 	Map.PrisonGatePrompt.Triggered:Connect(function(player)
-		FxRemote:FireClient(player, "Message", open and "The portcullis stands open." or "A portcullis, sealed fast. Something other than rust holds it shut.")
+		FxRemote:FireClient(player, "Message", "A portcullis, sealed fast. Something other than rust holds it shut.")
 	end)
 	ReplicatedStorage:GetAttributeChangedSignal("BonfireTravel"):Connect(function()
 		if open or ReplicatedStorage:GetAttribute("BonfireTravel") ~= true then
 			return
 		end
 		open = true
+		Map.PrisonGatePrompt.Enabled = false -- (nothing to inspect in an empty doorway; it reaches 8 studs through walls, onto the old cells' bars beside it)
 		FxRemote:FireAllClients("Message", "Far off, iron grinds. A way has opened into the prison's walls.")
 		playSound(G.Bars[1], SOUNDS.Unsheath, 1, 0.3)
 		for _, b in ipairs(G.Bars) do
@@ -385,7 +403,13 @@ do
 		end
 		D.Block.CanCollide = false
 		state = "down"
+		Save.mark("Drawbridge")
 	end
+	Save.on("Drawbridge", function() -- (down in this save: down, and its cutscene seen)
+		D.Set(D.Down)
+		D.Block.CanCollide = false
+		state = "down"
+	end)
 	local function scene(pl)
 		local st = states[pl]
 		local char, _, hrp = aliveChar(pl)
@@ -442,7 +466,7 @@ do
 	task.spawn(function()
 		while true do
 			task.wait(0.5)
-			if ReplicatedStorage:GetAttribute("BonfireTravel") == true then
+			if ReplicatedStorage:GetAttribute("BonfireTravel") == true and not Save.done("Drawbridge") then
 				for pl, st in pairs(states) do
 					if not st.bridgeSeen and not st.travelling and now() >= st.busyUntil then
 						local char, _, hrp = aliveChar(pl)
@@ -465,12 +489,12 @@ do
 	D.LockedPrompt.Triggered:Connect(function(player)
 		FxRemote:FireClient(player, "Message", open and "The door stands open." or "It will not budge. It must open from the other side.")
 	end)
-	D.Prompt.Triggered:Connect(function(player)
-		local _, _, hrp = aliveChar(player)
-		if open or not hrp or hrp.Position.X > -19 then -- (only from the hallway side, west of the door)
-			return
-		end
+	local function swing()
 		open = true
+		Save.mark("FallenDoor")
+		if D.Stop then
+			D.Stop.CanCollide = false
+		end
 		D.Prompt.Enabled = false
 		D.LockedPrompt.Enabled = false
 		playSound(D.Leaf.PrimaryPart, SOUNDS.Unsheath, 1, 0.3)
@@ -487,6 +511,13 @@ do
 			end
 			playSound(D.Leaf.PrimaryPart, SOUNDS.Impact, 0.6, 0.7)
 		end)
+	end
+	Save.on("FallenDoor", swing)
+	D.Prompt.Triggered:Connect(function(player)
+		local _, _, hrp = aliveChar(player)
+		if not open and hrp and hrp.Position.X <= -19 then -- (only from the hallway side, west of the door)
+			swing()
+		end
 	end)
 end
 
@@ -544,6 +575,7 @@ local function openGate()
 		return
 	end
 	gateOpen = true
+	Save.mark("LeverGate")
 	Map.LeverPrompt.Enabled = false
 	Map.LockedPrompt.Enabled = false
 	task.spawn(function()
@@ -564,20 +596,26 @@ local function openGate()
 	end)
 end
 
+Save.on("LeverGate", openGate)
 Map.LeverPrompt.Triggered:Connect(function(player)
+	local _, _, hrp = aliveChar(player)
+	if not hrp or hrp.Position.Z < 120.5 then -- (from the yard only: the corridor's side of the gate is within reach of it)
+		return
+	end
 	openGate()
 	FxRemote:FireClient(player, "Message", "A shortcut has opened.")
 end)
 
 -- a ladder that lies up high until it is kicked down: it stays down (a way between the two levels).
--- L = { Ladder, Down, Prompt, UpPrompt, DownPrompt, Climb, Block? } - the yard's, and the Hollow Mansion's
-local yardLadder = { Ladder = Map.Ladder, Down = Map.LadderDown, Prompt = Map.LadderPrompt, UpPrompt = Map.LadderUpPrompt, DownPrompt = Map.LadderDownPrompt, Climb = Map.LadderClimb }
+-- L = { Ladder, Down, Prompt, UpPrompt, DownPrompt, Climb, Block?, Id (its save's name) } - the yard's, and the Hollow Mansion's
+local yardLadder = { Ladder = Map.Ladder, Down = Map.LadderDown, Prompt = Map.LadderPrompt, UpPrompt = Map.LadderUpPrompt, DownPrompt = Map.LadderDownPrompt, Climb = Map.LadderClimb, Id = "Yard" }
 local function kickLadder(player, L)
 	L = L or yardLadder
 	if not L.Prompt.Enabled then
 		return
 	end
 	L.Prompt.Enabled = false
+	Save.mark("Ladder_" .. L.Id)
 	local ladder, to = L.Ladder, L.Down
 	local half = ladder.Size.Y / 2
 	local foot = ladder.CFrame * Vector3.new(0, -half, 0) -- lying flat, its foot at the gap
@@ -604,7 +642,7 @@ local function kickLadder(player, L)
 		-- 2) swung round so its rungs run along the wall
 		local up = foot + Vector3.new(0, half, 0)
 		run(0.2, function(a)
-			ladder.CFrame = CFrame.new(up) * CFrame.Angles(0, psi + a * math.pi / 2, 0)
+			ladder.CFrame = CFrame.new(up) * CFrame.Angles(0, psi + a * (L.Swing or math.pi / 2), 0)
 		end)
 		-- 3) heaved up and over the gap (its foot clears the battlements)...
 		local over = Vector3.new(to.Position.X, up.Y + 2.2, to.Position.Z)
@@ -625,24 +663,32 @@ local function kickLadder(player, L)
 		L.DownPrompt.Enabled = true
 	end)
 end
-Map.LadderPrompt.Triggered:Connect(function(player)
-	kickLadder(player, yardLadder)
-end)
-Map.MansionLadder.Prompt.Triggered:Connect(function(player)
-	kickLadder(player, Map.MansionLadder)
-end)
-Map.WingLadder.Prompt.Triggered:Connect(function(player) -- (the prison wing's: down its shaft to the cell block)
-	kickLadder(player, Map.WingLadder)
-end)
+-- each ladder: kicked by its prompt, and kicked again (quietly) if the save has it down
+local function ladder(L, id)
+	if L then
+		L.Id = id
+		Save.on("Ladder_" .. id, function()
+			kickLadder(Save.player, L)
+		end)
+		L.Prompt.Triggered:Connect(function(player)
+			kickLadder(player, L)
+		end)
+	end
+	return L
+end
+ladder(yardLadder, "Yard")
+ladder(Map.MansionLadder, "Mansion")
+ladder(Map.WingLadder, "Wing") -- (the prison wing's: down its shaft to the cell block)
 
 -- the Castellan's keep: its portcullis is hauled up by the chain inside and stays up
 -- (a way back in from the hall's roof); from the roof it won't budge till then
 local keepOpen = false
-Map.KeepChainPrompt.Triggered:Connect(function(player)
+local function raiseKeepGate()
 	if keepOpen then
 		return
 	end
 	keepOpen = true
+	Save.mark("KeepGate")
 	Map.KeepChainPrompt.Enabled = false
 	Map.KeepGateLocked.Enabled = false
 	local ring, c0 = Map.KeepChain, Map.KeepChain.CFrame
@@ -668,7 +714,17 @@ Map.KeepChainPrompt.Triggered:Connect(function(player)
 		end
 		playSound(gate.PrimaryPart, SOUNDS.Impact, 0.8, 0.5)
 	end)
-	FxRemote:FireClient(player, "Message", "A shortcut has opened.")
+end
+Save.on("KeepGate", raiseKeepGate)
+Map.KeepChainPrompt.Triggered:Connect(function(player)
+	local _, _, hrp = aliveChar(player)
+	if not hrp or hrp.Position.Z > 273 then -- (from inside only: the chain is within reach through the bars)
+		return
+	end
+	if not keepOpen then
+		raiseKeepGate()
+		FxRemote:FireClient(player, "Message", "A shortcut has opened.")
+	end
 end)
 Map.KeepGateLocked.Triggered:Connect(function(player)
 	FxRemote:FireClient(player, "Message", "It will not budge. It must open from the other side.")
@@ -676,11 +732,12 @@ end)
 -- the great door into the Castellan's hall: the bar lifted off, both leaves swung in
 -- (open for now, so the hall can be looked over; the fight behind it is still to come)
 local greatDoorOpen = false
-Map.GreatDoor.Prompt.Triggered:Connect(function()
+local function openGreatDoor()
 	if greatDoorOpen then
 		return
 	end
 	greatDoorOpen = true
+	Save.mark("GreatDoor")
 	local D = Map.GreatDoor
 	D.Prompt.Enabled = false
 	playSound(D.Bar, SOUNDS.Unsheath, 0.8, 0.4)
@@ -704,10 +761,17 @@ Map.GreatDoor.Prompt.Triggered:Connect(function()
 			task.wait(1 / 30)
 		end
 	end)
-end)
+end
+Save.on("GreatDoor", openGreatDoor)
+Map.GreatDoor.Prompt.Triggered:Connect(openGreatDoor)
 
--- the keep's pickups: taken once (for everyone), kept across deaths as a player attribute
+-- the keep's pickups: taken once, kept across deaths as a player attribute (and gone again when the save is loaded)
 local function takePickup(pk)
+	for name, p in pairs(Map.Pickups) do
+		if p == pk then
+			Save.mark("Pickup_" .. name)
+		end
+	end
 	pk.Prompt.Enabled = false
 	for _, p in ipairs(pk.Parts) do
 		p.Transparency = 1
@@ -718,6 +782,11 @@ local function takePickup(pk)
 		end
 	end
 	playSound(pk.Glow, SOUNDS.Unsheath, 0.6, 1.5)
+end
+for name, pk in pairs(Map.Pickups) do
+	Save.on("Pickup_" .. name, function()
+		takePickup(pk)
+	end)
 end
 -- the Castellan's Helm, worn in place of the knight's own helm
 local MapBuilder = require(script:WaitForChild("MapBuilder"))
@@ -761,7 +830,12 @@ function dressArmor(player, char)
 	if not worn.Motley then
 		Roster.byKind.Taylor.unwear(char)
 	end
-	for _, key in ipairs({ "DarkCloak", "DarkHood", "CaelenArmor", "PotbellyArmor" }) do
+	for _, key in ipairs({ "DarkCloak", "DarkHood", "VeilOfFlame", "CaelenArmor", "PotbellyArmor", "PyreMask", "PyreRobes" }) do
+		if not worn[key] then
+			Armor.unwear(char, key)
+		end
+	end
+	for key in pairs(Armor.Wear) do
 		if not worn[key] then
 			Armor.unwear(char, key)
 		end
@@ -787,6 +861,20 @@ function dressArmor(player, char)
 	end
 	if worn.DarkHood then
 		Armor.wearDarkHood(char)
+	end
+	if worn.VeilOfFlame then
+		Armor.wearVeil(char)
+	end
+	if worn.PyreRobes then
+		Armor.wearPyreRobes(char)
+	end
+	if worn.PyreMask then
+		Armor.wearPyreMask(char)
+	end
+	for key, wear in pairs(Armor.Wear) do
+		if worn[key] then
+			wear(char)
+		end
 	end
 	Armor.aura(char, Config.armorBonus(player).Aura)
 end
@@ -843,9 +931,20 @@ Map.Pickups.TunnelKey.Prompt.Triggered:Connect(function(player)
 	FxRemote:FireClient(player, "Message", "Tunnel Key. Rusted through, grey sinew knotted round its bow. It would fit the door at the end of the high bridge.")
 end)
 
--- the keep's locked chests (MapBuilder: KeepChests), opened with the chest key, once (for everyone)
-local TweenService = game:GetService("TweenService")
-for _, ch in ipairs(Map.KeepChests) do
+-- a chest's lid thrown back, for good (and its save's mark: id)
+local function openChest(ch, id)
+	Save.mark("Chest_" .. id)
+	ch.Prompt.Enabled = false
+	local swung = ch.Hinge * CFrame.Angles(math.rad(110), 0, 0) * ch.Hinge:Inverse() * ch.Lid.CFrame
+	TweenService:Create(ch.Lid, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = swung }):Play()
+	playSound(ch.Lid, SOUNDS.Unsheath, 0.6, 0.6)
+end
+-- the keep's locked chests (MapBuilder: KeepChests), opened with the chest key, once
+for i, ch in ipairs(Map.KeepChests) do
+	local id = "Keep" .. i
+	Save.on("Chest_" .. id, function()
+		openChest(ch, id)
+	end)
 	ch.Prompt.Triggered:Connect(function(player)
 		if not ch.Prompt.Enabled then
 			return
@@ -854,10 +953,7 @@ for _, ch in ipairs(Map.KeepChests) do
 			FxRemote:FireClient(player, "Message", "Locked.")
 			return
 		end
-		ch.Prompt.Enabled = false
-		local swung = ch.Hinge * CFrame.Angles(math.rad(110), 0, 0) * ch.Hinge:Inverse() * ch.Lid.CFrame
-		TweenService:Create(ch.Lid, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = swung }):Play()
-		playSound(ch.Lid, SOUNDS.Unsheath, 0.6, 0.6)
+		openChest(ch, id)
 		local def = ch.Loot and Config.Weapons[ch.Loot]
 		if not def then
 			FxRemote:FireClient(player, "Message", "Nothing inside but dust.")
@@ -868,17 +964,110 @@ for _, ch in ipairs(Map.KeepChests) do
 	end)
 end
 
--- the mushroom huts' chests (MapBuilder: MushroomChests): unlocked, opened once (for everyone); each holds
+-- ARMOR CHESTS: the found pieces (Config.Armor TurnkeyCoif .. HeadsmanJerkin; Armor.Wear), each in a plain chest of
+-- its own somewhere it belongs. A spot is a point on a floor and the way the lock faces; the chest is set down there,
+-- or as near as the floor allows (within 10 studs, in sight of the spot, clear of walls and furniture), so nothing
+-- ends up in a wall or on a table. Opened like the mushroom huts' (below), once.
+do
+	local SPOTS = {
+		{ "TurnkeyCoif", Vector3.new(40.5, 54, 222.5), Vector3.new(-1, 0, 0), "Turnkey's Coif. Quilted linen gone yellow, mail sewn down the sides. A cell key still tied at the temple." },
+		{ "Brigandine", Vector3.new(38.5, 42, 232), Vector3.new(-1, 0, 0), "Pikeman's Brigandine. Red canvas over plates you can feel and not see; the rivets are kept bright." },
+		{ "GaolerCoat", Vector3.new(79.4, -6, 68.4), Vector3.new(-1, 0, 0), "Jailer's Long Coat. Heavy with damp and keys. Someone has scratched a tally of years over its heart." },
+		{ "Sackcloth", Vector3.new(-49.4, 0, 65), Vector3.new(1, 0, 0), "Penitent's Sackcloth. Patched past counting, the manacles still on its sleeves. Whatever was confessed in it, it was not forgiven." },
+		{ "HangmanHood", Vector3.new(-28.5, 0, 149.5), Vector3.new(0, 0, 1), "Hangman's Hood. Black canvas, eyeholes cut by hand. The noose comes with it." },
+		{ "Tricorne", Vector3.new(-146, 60, 186.8), Vector3.new(0, 0, -1), "Townwarden's Tricorne. The plume is still proud. The town it kept is not." },
+		{ "Tailcoat", Vector3.new(-238.3, 60.5, -30.6), Vector3.new(1, 0, 0), -- (beside the foyer's west door, z -27.5..-20.5, not in it)
+		 "Steward's Tailcoat. Pressed, brushed, the cloth still over its arm. It waited at the door for guests a long time." },
+		{ "HunterCoat", Vector3.new(-238.3, 60.5, -131), Vector3.new(1, 0, 0), "Nightwatch Greatcoat. Tails in ribbons, belts crossed, the vials down one of them long gone dark." },
+		{ "MourningVeil", Vector3.new(-247.2, 84.5, -114.5), Vector3.new(-1, 0, 0), "Widow's Mourning Veil. Black lace and a rose dried to paper. She mourned this house before it died." },
+		{ "ChampionGalea", Vector3.new(-60.5, 26.8, 520), Vector3.new(-1, 0, 0), "Crowned Champion's Galea. Laurels of gold, a crest of red horsehair. The crowd that cheered it is dust in the stands." },
+		{ "ChampionHarness", Vector3.new(-159.5, 26.8, 520), Vector3.new(1, 0, 0), "Crowned Champion's Harness. Bronze down the sword arm, the leather dark with old sweat." },
+		{ "Oilskin", Vector3.new(179.2, 0, 490), Vector3.new(1, 0, 0), "Mire-Diver's Oilskin. Waxed against the slime, waders to the hip, a lantern that has not gone out." },
+		{ "DrifterHat", Vector3.new(244.8, 26, 630), Vector3.new(-1, 0, 0), "Drifter's Hat. Straw, a scarf and a fishing float. Light, and made for walking far." },
+		{ "Patchwork", Vector3.new(328.8, 26, 726), Vector3.new(-1, 0, 0), "Ragpicker's Patchwork. Every rag of the township is in it somewhere, and a few of its bones." },
+		{ "SentinelSallet", Vector3.new(464, 100, 192), Vector3.new(-1, 0, 0), "Bulwark Sentinel's Sallet. Blackened steel, an ember lit behind the slit. Its plume smoulders and never burns down." },
+		{ "HeadsmanJerkin", Vector3.new(460, 86, 176.5), Vector3.new(0, 0, 1), "Headsman's Jerkin. Studded leather and an apron that was scrubbed, once." },
+		{ "EmberDoublet", Vector3.new(575, 114, 230), Vector3.new(0, 0, 1), "Ember Court Doublet. Crimson slashed with gold, flames stitched on the cape. Made for a court that knelt to fire." },
+	}
+	-- (the Decayed Palace's: its town's lore, and Mabel's ring for Giles's questline - not armor, so no "Press T")
+	for _, s in ipairs(Map.DecayedLore or {}) do
+		table.insert(SPOTS, s)
+	end
+	if Map.MabelRingAt then
+		table.insert(SPOTS, { "MabelRing", Map.MabelRingAt, Vector3.new(-1, 0, 0), Config.Taylor.RingItem })
+	end
+	local DGUS = workspace:FindFirstChild("DGUS")
+	local folder = Instance.new("Model")
+	folder.Name = "ArmorChests"
+	folder.Parent = DGUS or workspace
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { folder, Core.EnemiesFolder }
+	local overlap = OverlapParams.new()
+	overlap.FilterType = Enum.RaycastFilterType.Exclude
+	overlap.FilterDescendantsInstances = { folder, Core.EnemiesFolder }
+	local UP2 = Vector3.new(0, 2, 0)
+	-- where a chest goes: the floor at or near at (a CFrame, lock to the front), or nil
+	local function settle(at, face)
+		for r = 0, 10, 1.5 do
+			for i = 0, r == 0 and 0 or 11 do
+				local a = i / 12 * math.pi * 2
+				local p = at + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+				local hit = workspace:Raycast(p + Vector3.new(0, 3, 0), Vector3.new(0, -7, 0), params)
+				if hit and hit.Normal.Y > 0.9 and math.abs(hit.Position.Y - at.Y) < 1.5 then
+					local cf = CFrame.lookAt(hit.Position, hit.Position + face)
+					local clear = true
+					for _, q in ipairs(workspace:GetPartBoundsInBox(cf * CFrame.new(0, 1.5, 0), Vector3.new(4.4, 2.4, 2.8), overlap)) do
+						if q.CanCollide or (q.Transparency < 1 and q.Size.Magnitude > 2) then -- (books and bones on the floor don't count)
+							clear = false
+							break
+						end
+					end
+					if clear and not workspace:Raycast(at + UP2, hit.Position - at, params) then
+						return cf
+					end
+				end
+			end
+		end
+	end
+	local function part(name, size, cf, mat, color, collide)
+		local q = Instance.new("Part")
+		q.Name, q.Size, q.CFrame, q.Material, q.Color = name, size, cf, mat, color
+		q.Anchored, q.CanCollide = true, collide ~= false
+		q.TopSurface, q.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
+		q.Parent = folder
+		return q
+	end
+	local WOOD, IRON, GOLD = Color3.fromRGB(58, 42, 30), Color3.fromRGB(56, 54, 52), Color3.fromRGB(176, 140, 66)
+	for _, s in ipairs(SPOTS) do
+		local key, at, face, text = s[1], s[2], s[3], s[4]
+		local cf = settle(at, face)
+		if not cf then
+			warn("[ArmorChests] no room for " .. key .. "'s chest near " .. tostring(at) .. ": set down there as it is")
+			cf = CFrame.lookAt(at, at + face)
+		end
+		Map.ChestBody(cf, Vector3.new(4, 2.2, 2.4), Enum.Material.WoodPlanks, WOOD, "Chest", folder, { -1.5, 0, 1.5 }, Enum.Material.Metal, IRON) -- (hollow)
+		part("ChestLock", Vector3.new(0.5, 0.55, 0.12), cf * CFrame.new(0, 1.8, -1.25), Enum.Material.Metal, GOLD, false)
+		local lid = part("ChestLid", Vector3.new(4.05, 0.45, 2.45), cf * CFrame.new(0, 2.42, 0), Enum.Material.WoodPlanks, WOOD)
+		local pp = Instance.new("ProximityPrompt")
+		pp.ActionText, pp.ObjectText, pp.HoldDuration, pp.MaxActivationDistance, pp.RequiresLineOfSight = "Open", "Chest", 0.5, 7, false
+		pp.Parent = lid
+		table.insert(Map.MushroomChests, { Lid = lid, Hinge = cf * CFrame.new(0, 2.65, 1.2), Item = { Attr = key, Text = Config.Armor[key] and text .. " Press T to choose weapons and armor." or text }, Prompt = pp })
+	end
+end
+
+-- the mushroom huts' chests (MapBuilder: MushroomChests) and the armor chests above: unlocked, opened once; each holds
 -- one item, a player attribute (the Bleak Manor key, the Foul Dagger; the Dark Book's is empty - Aldous drops it now)
-for _, ch in ipairs(Map.MushroomChests) do
+for i, ch in ipairs(Map.MushroomChests) do
+	local id = ch.Item.Attr or "Hut" .. i -- (an item's own name where it has one: those don't move about as chests are added)
+	Save.on("Chest_" .. id, function()
+		openChest(ch, id)
+	end)
 	ch.Prompt.Triggered:Connect(function(player)
 		if not ch.Prompt.Enabled then
 			return
 		end
-		ch.Prompt.Enabled = false
-		local swung = ch.Hinge * CFrame.Angles(math.rad(110), 0, 0) * ch.Hinge:Inverse() * ch.Lid.CFrame
-		TweenService:Create(ch.Lid, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = swung }):Play()
-		playSound(ch.Lid, SOUNDS.Unsheath, 0.6, 0.6)
+		openChest(ch, id)
 		if ch.Item.Attr then -- (an empty one has none)
 			player:SetAttribute(ch.Item.Attr, true)
 		end
@@ -886,39 +1075,87 @@ for _, ch in ipairs(Map.MushroomChests) do
 	end)
 end
 
+-- the Decayed Palace's grand gate (DecayedPalace: DecayedGate): Giles's key opens it, for good -
+-- the chain and roots torn away, the leaves swung back into the passage, the Vale's invisible rim cut across its foot
+if Map.DecayedGate and Map.DecayedGate.Padlock then
+	local G = Map.DecayedGate
+	local pp = Instance.new("ProximityPrompt")
+	pp.ActionText, pp.ObjectText, pp.HoldDuration, pp.MaxActivationDistance, pp.RequiresLineOfSight = "Unlock", "Grand Gate", 0.8, 10, false
+	pp.Parent = G.Padlock
+	local function open()
+		pp.Enabled = false
+		Map.DecayedGateOpen = true
+		Save.mark("DecayedGate")
+		FxRemote:FireAllClients("Message", "The grand gate groans open.")
+		playSound(G.Padlock, SOUNDS.Impact, 0.8, 0.4)
+		for _, p in ipairs(G.Tear) do
+			p:Destroy()
+		end
+		for i, leaf in ipairs(G.Leaves) do -- (west leaf on its hinge at X1, east at X2; both swing north, into the passage)
+			local hinge = CFrame.new(i == 1 and G.X1 or G.X2, G.Y, G.DZ)
+			local swing = hinge * CFrame.Angles(0, math.rad(i == 1 and -80 or 80), 0) * hinge:Inverse()
+			for _, p in ipairs(leaf) do
+				TweenService:Create(p, TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { CFrame = swing * p.CFrame }):Play()
+			end
+		end
+		for _, w in ipairs(workspace:GetDescendants()) do -- (the rim can't be queried: CanQuery off. Once, so a sweep)
+			local x1, x2 = w:IsA("BasePart") and w.Position.X - w.Size.X / 2, w:IsA("BasePart") and w.Position.X + w.Size.X / 2
+			if w.Name == "Edge" and x1 and x1 < G.GX and x2 > G.GX and math.abs(w.Position.Z - 535.5) < 2 and math.abs(w.Position.Y - G.Y) < 20 then -- (keep what's either side of the doorway)
+				for _, span in ipairs({ { x1, G.X1 }, { G.X2, x2 } }) do
+					if span[2] - span[1] > 0.5 then
+						local c = w:Clone()
+						c.Size = Vector3.new(span[2] - span[1], w.Size.Y, w.Size.Z)
+						c.Position = Vector3.new((span[1] + span[2]) / 2, w.Position.Y, w.Position.Z)
+						c.Parent = w.Parent
+					end
+				end
+				w:Destroy()
+			end
+		end
+	end
+	Save.on("DecayedGate", open)
+	pp.Triggered:Connect(function(player)
+		if not pp.Enabled then
+			return
+		end
+		if not player:GetAttribute("GateKey") then
+			FxRemote:FireClient(player, "Message", "Locked. The lock has gone to a lump of green, but there is still a keyhole in it.")
+			return
+		end
+		open()
+	end)
+end
+
 -- the grate over the hole down to the Oculast arena (MapBuilder: HoleGrate): a prompt slides it aside, for good
 do
 	local G = Map.HoleGrate
-	G.Prompt.Triggered:Connect(function(player)
-		if not G.Prompt.Enabled then
-			return
-		end
+	local function slide()
 		G.Prompt.Enabled = false
-		FxRemote:FireClient(player, "Message", "The grate scrapes aside. A long way down.")
+		Save.mark("HoleGrate")
 		for _, p in ipairs(G.Parts) do
 			playSound(p, SOUNDS.Impact, 0.5, 0.5)
 			p.CanCollide = false
 			TweenService:Create(p, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = p.Position + Vector3.new(0, 0, -14) }):Play()
 		end
+	end
+	Save.on("HoleGrate", slide)
+	G.Prompt.Triggered:Connect(function(player)
+		if G.Prompt.Enabled then
+			slide()
+			FxRemote:FireClient(player, "Message", "The grate scrapes aside. A long way down.")
+		end
 	end)
 end
 
 -- the Citadel's gate and its winch (MapBuilder: CitadelGate, CitadelWinch): the Steel Crank, from the Usher's
--- chest, fits the winch; turning it raises the gate for everyone, for good
+-- chest, fits the winch; turning it raises the gate, for good
 do
 	local W, G = Map.CitadelWinch, Map.CitadelGate
 	local up = false
-	W.Prompt.Triggered:Connect(function(player)
-		if up then
-			return
-		end
-		if not player:GetAttribute("SteelCrank") then
-			FxRemote:FireClient(player, "Message", "A winch for the gate. Its crank is long gone.")
-			return
-		end
+	local function wind()
 		up = true
+		Save.mark("CitadelGate")
 		W.Prompt.Enabled = false
-		FxRemote:FireClient(player, "Message", "The Steel Crank fits. The gate groans.")
 		for _, p in ipairs(W.Crank) do
 			p.Transparency = 0
 		end
@@ -940,14 +1177,26 @@ do
 		for _, p in ipairs(G.Bars) do
 			TweenService:Create(p, TweenInfo.new(3.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { Position = p.Position + Vector3.new(0, 12, 0) }):Play()
 		end
-	end)
+	end
 	W.CrankHome = {}
 	for _, p in ipairs(W.Crank) do
 		W.CrankHome[p] = p.CFrame
 	end
+	Save.on("CitadelGate", wind)
+	W.Prompt.Triggered:Connect(function(player)
+		if up then
+			return
+		end
+		if not player:GetAttribute("SteelCrank") then
+			FxRemote:FireClient(player, "Message", "A winch for the gate. Its crank is long gone.")
+			return
+		end
+		FxRemote:FireClient(player, "Message", "The Steel Crank fits. The gate groans.")
+		wind()
+	end)
 end
 
--- locked doors: each opens with its key (a player attribute), for everyone, and stays open
+-- locked doors: each opens with its key (a player attribute), and stays open
 --   the battlement door on the keep's roof (the strongroom's key)
 --   the tunnel door at the end of the high bridge over the encampment (the far ravine's key);
 --     the old hag shut in behind it falls out (onOpen: Characters/Hag)
@@ -966,8 +1215,17 @@ local function swingDoor(D)
 		playSound(D.Leaf.PrimaryPart, SOUNDS.Impact, 0.7, 0.5)
 	end)
 end
-local function lockedDoor(D, keyAttr, lockedText, onOpen)
+local function lockedDoor(D, id, keyAttr, lockedText, onOpen, openText)
 	local open = false
+	local function unlock()
+		open = true
+		Save.mark(id)
+		swingDoor(D)
+		if onOpen then
+			onOpen()
+		end
+	end
+	Save.on(id, unlock)
 	D.Prompt.Triggered:Connect(function(player)
 		if open then
 			return
@@ -976,28 +1234,44 @@ local function lockedDoor(D, keyAttr, lockedText, onOpen)
 			FxRemote:FireClient(player, "Message", lockedText)
 			return
 		end
-		open = true
-		FxRemote:FireClient(player, "Message", "The key turns.")
-		swingDoor(D)
-		if onOpen then
-			onOpen()
-		end
+		FxRemote:FireClient(player, "Message", openText or "The key turns.")
+		unlock()
 	end)
 end
-lockedDoor(Map.RoofDoor, "KeepKey", "Locked. A heavy lock, made for a heavy key.")
-lockedDoor(Map.TunnelDoor, "TunnelKey", "Locked. The lock is caked in rot, but it's whole.", Roster.byKind.Hag.emerge)
+lockedDoor(Map.RoofDoor, "RoofDoor", "KeepKey", "Locked. A heavy lock, made for a heavy key.")
+lockedDoor(Map.TunnelDoor, "TunnelDoor", "TunnelKey", "Locked. The lock is caked in rot, but it's whole.", Roster.byKind.Hag.emerge)
+-- the Decayed Palace's throne hall (Map.ThroneSeal: DecayedPalace): shut with the Gilded King's crown, open to his blessing
+if Map.ThroneSeal then
+	lockedDoor(Map.ThroneSeal, "ThroneSeal", "KingsBlessing", Config.GildedKing.SealLocked, nil, Config.GildedKing.SealOpens)
+end
 
 -- the Hollow Mansion's doors that open from one side only: from the other, they will not budge
--- (which prompt fired says nothing: both reach through the door, so where the player stands decides)
-for _, D in ipairs(Map.MansionDoors) do
+-- (which prompt fired says nothing: both reach through the door, so where the player stands decides - on its side, and
+-- with nothing between them and it: the side is a whole plane, and prompts reach through walls into rooms beside it)
+local doorSight = RaycastParams.new()
+doorSight.RespectCanCollide = true
+local function facesDoor(root, D)
+	local c = D.Leaf.PrimaryPart.Position
+	doorSight.FilterDescendantsInstances = { root.Parent, D.Leaf }
+	return workspace:Raycast(root.Position, c - root.Position, doorSight) == nil
+end
+for i, D in ipairs(Map.MansionDoors) do
+	local function open()
+		Save.mark("MansionDoor" .. i)
+		D.Blocked.Enabled = false
+		swingDoor(D)
+	end
+	Save.on("MansionDoor" .. i, open)
 	local function try(player)
 		if not D.Prompt.Enabled then
 			return
 		end
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if root and (root.Position - D.Hinge):Dot(D.Normal) > 0 then
-			D.Blocked.Enabled = false
-			swingDoor(D)
+		if root and (root.Position - D.Hinge):Dot(D.Normal) > 0 and facesDoor(root, D) then
+			open()
+			if D.Message then
+				FxRemote:FireClient(player, "Message", D.Message)
+			end
 		else
 			FxRemote:FireClient(player, "Message", "It will not budge. It must open from the other side.")
 		end
@@ -1008,14 +1282,18 @@ end
 
 -- the dry brushwood choking the west tunnel off the high bridge (MapBuilder: Map.Brushwood):
 -- a fireball sets it Lit (Knight's castFireball), it goes up, chars and falls away, and the
--- way through is open, for everyone
+-- way through is open
 do
 	local B = Map.Brushwood
+	Save.on("Brushwood", function() -- (burnt away in this save: gone)
+		B:Destroy()
+	end)
 	B:GetAttributeChangedSignal("Lit"):Connect(function()
 		if B:GetAttribute("Burning") then
 			return
 		end
 		B:SetAttribute("Burning", true)
+		Save.mark("Brushwood")
 		local parts = {}
 		for _, p in ipairs(B:GetDescendants()) do
 			if p:IsA("BasePart") then
@@ -1069,7 +1347,7 @@ do
 			player:SetAttribute("RangBell", true)
 			FxRemote:FireClient(player, "Message", "The bell tolls out over the prison, for the first time in a long while.")
 		end
-		task.spawn(Carrier.take, player) -- (something hears it: once, for whoever rang)
+		task.spawn(Carrier.take, player) -- (something hears it: every time, for whoever rang)
 		task.spawn(function()
 			local t0 = os.clock()
 			local tolled = 0
@@ -1098,63 +1376,150 @@ do
 	end)
 end
 
--- dev menu cheats (the client's K menu): only while Config.Debug is on
-ActionRemote.OnServerEvent:Connect(function(player, action)
-	if action == "DevLadder" and Config.Debug then
+-- dev menu cheats (the client's K menu): only for a dev (isDev, above)
+ActionRemote.OnServerEvent:Connect(function(player, action, arg)
+	if action == "DevUnlock" then -- (arg: the keys typed before K)
+		if Config.Debug and typeof(arg) == "string" and #arg <= 32 and arg:sub(-#DEV_CODE) == DEV_CODE then
+			player:SetAttribute("Dev", true)
+		end
+	elseif action == "DevLadder" and isDev(player) then
 		kickLadder(player)
-	elseif action == "DevKeepStair" and Config.Debug then
+	elseif action == "DevKeepStair" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.KeepStair)
 		end
-	elseif action == "DevNewArea" and Config.Debug then
+	elseif action == "DevNewArea" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.NewArea.Landing)
 		end
-	elseif action == "DevTownship" and Config.Debug then
+	elseif action == "DevTownship" and isDev(player) then
 		-- just through the Warden's arena exit, into Gallows Square, where the dogs are
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(CFrame.lookAt(Vector3.new(64, 3, 260), Vector3.new(124, 3, 252)))
 		end
-	elseif action == "DevCastellanHP" and Config.Debug then
+	elseif action == "DevCastellanHP" and isDev(player) then
 		Castellan.devWound()
-	elseif action == "DevColosseum" and Config.Debug then
+	elseif action == "DevColosseum" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.ColosseumDev)
 		end
-	elseif action == "DevCitadel" and Config.Debug then
+	elseif action == "DevDecayed" and isDev(player) then
+		local char = aliveChar(player)
+		if char and Map.DecayedDev then
+			char:PivotTo(Map.DecayedDev)
+		end
+	elseif action == "DevHeights" and isDev(player) then
+		local char = aliveChar(player)
+		if char and Map.HeightsDev then
+			char:PivotTo(Map.HeightsDev)
+		end
+	elseif action == "DevBallroom" and isDev(player) then
+		local char = aliveChar(player)
+		local B = Map.Heights and Map.Heights.Ballroom
+		if char and B then
+			char:PivotTo(B.Dev)
+		end
+	elseif action == "DevGildedNext" and isDev(player) then
+		-- the next kind in Config.GildedEnemies: stood a little way off the nearest one alive, facing it, its name on screen
+		local char, _, hrp = aliveChar(player)
+		local list = Config.GildedEnemies or {}
+		if char and #list > 0 then
+			for _ = 1, #list do
+				local i = (player:GetAttribute("GildedNext") or 0) % #list + 1
+				player:SetAttribute("GildedNext", i)
+				local best, bestD
+				for _, m in ipairs(Core.EnemiesFolder:GetChildren()) do
+					local r = m.Name == list[i] and m:FindFirstChild("HumanoidRootPart")
+					local h = r and m:FindFirstChildOfClass("Humanoid")
+					if h and h.Health > 0 and (not bestD or (r.Position - hrp.Position).Magnitude < bestD) then
+						best, bestD = r, (r.Position - hrp.Position).Magnitude
+					end
+				end
+				if best then
+					local at = best.Position + best.CFrame.LookVector * 16
+					char:PivotTo(CFrame.lookAt(at, Vector3.new(best.Position.X, at.Y, best.Position.Z)))
+					FxRemote:FireClient(player, "Message", string.format("%d/%d  %s", i, #list, list[i]))
+					break
+				end
+			end
+		end
+	elseif action == "DevCitadel" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.CitadelDev)
 		end
-	elseif action == "DevAtticStair" and Config.Debug then
+	elseif action == "DevAtticStair" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.AtticStairDev)
 		end
-	elseif action == "DevFallenStair" and Config.Debug then
+	elseif action == "DevFallenStair" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.FallenStairDev)
 		end
-	elseif action == "DevMesa" and Config.Debug then
+	elseif action == "DevMesa" and isDev(player) then
 		local char = aliveChar(player)
 		if char then
 			char:PivotTo(Map.MesaDev)
 		end
-	elseif action == "DevChampionHP" and Config.Debug then
+	elseif action == "DevStairKeys" and isDev(player) then
+		Champion.devKill()
+		player:SetAttribute("SilverKey", true)
+		player:SetAttribute("FlameKey", true)
+		player:SetAttribute("FoulKey", true)
+		FxRemote:FireClient(player, "Message", "The Silver Knight is dead, and you hold all three keys. Come onto his sand from outside the arena.")
+	elseif action == "DevChampionHP" and isDev(player) then
 		Champion.devWound()
-	elseif action == "DevConsulHP" and Config.Debug then
+	elseif action == "DevConsulHP" and isDev(player) then
 		Roster.byKind.Consul.devWound()
-	elseif action == "DevBulwark" and Config.Debug then
+	elseif action == "DevKingEnd" and isDev(player) then
+		Roster.byKind.KingInquisitor.devEnd()
+	elseif action == "DevBulwark" and isDev(player) then
 		local char = aliveChar(player)
 		if char and Map.Bulwark then
 			char:PivotTo(Map.Bulwark.Dev)
 		end
-	elseif action == "DevPyralis" and Config.Debug then
+	elseif action == "DevPalace" and isDev(player) then
+		-- just inside the Palace of Pyralis: in the gatehouse's hall, past the drawbridge, facing the forecourt
+		local char = aliveChar(player)
+		if char then
+			char:PivotTo(CFrame.lookAt(Vector3.new(421, 103.2, 242), Vector3.new(440, 103.2, 242)))
+		end
+	elseif action == "DevSunkenCourt" and isDev(player) then
+		-- the king's arena, the Sunken Court under the palace: on its floor, facing the colossus
+		local char = aliveChar(player)
+		local sc = Map.SunkenCourt
+		if char and sc then
+			char:PivotTo(CFrame.lookAt(Vector3.new(495, sc.Floor + 3.2, 220), Vector3.new(432, sc.Floor + 3.2, 220)))
+		end
+	elseif action == "DevGod" and isDev(player) then
+		local st = states[player]
+		if st then
+			st.devGod = arg == true
+		end
+	elseif action == "DevOssaria" and isDev(player) then
+		-- the Rotted Court under the Decayed Palace's throne hall: on the old lift's landing, facing her (skips the descent)
+		local char = aliveChar(player)
+		if char and Map.OssariaPit then
+			char:PivotTo(Map.OssariaPit.Landing)
+		end
+	elseif action == "DevOss" and isDev(player) and typeof(arg) == "string" then
+		-- her own menu: any of her cutscenes or phases, from anywhere (Ossaria.luau's M.dev)
+		local Oss = require(script:WaitForChild("Ossaria"))
+		if Oss.dev then
+			Oss.dev(player, arg)
+		end
+	elseif action == "DevCensery" and isDev(player) then
+		local char = aliveChar(player)
+		if char and Map.Bulwark and Map.Bulwark.Censery then
+			char:PivotTo(Map.Bulwark.Censery.Dev)
+		end
+	elseif action == "DevPyralis" and isDev(player) then
 		-- the way east's last stretch, ten short of the arena's gate, facing it
 		local char = aliveChar(player)
 		local door = Map.Underfire and Map.Underfire.Arena and Map.Underfire.Arena.Door
@@ -1189,7 +1554,7 @@ local function climbLadder(player, up, L)
 	st.healing = false
 	Core.cancelSwing(st)
 	FxRemote:FireClient(player, "Grabbed", total) -- (the client holds its inputs too)
-	local facing = Vector3.new(1, 0, 0) -- toward the wall
+	local facing = C.facing or Vector3.new(1, 0, 0) -- toward the wall
 	local function pose(name, blend)
 		char:SetAttribute("BP", name)
 		char:SetAttribute("BPT", blend)
@@ -1225,13 +1590,20 @@ local function climbLadder(player, up, L)
 	end
 	climbing[player] = nil
 end
-for _, L in ipairs({ yardLadder, Map.MansionLadder, Map.WingLadder }) do
-	L.UpPrompt.Triggered:Connect(function(player)
-		climbLadder(player, true, L)
-	end)
-	L.DownPrompt.Triggered:Connect(function(player)
-		climbLadder(player, false, L)
-	end)
+local palaceLadder = ladder(Map.Bulwark and Map.Bulwark.PalaceLadder, "Palace") -- (the Palace of Pyralis's: its north gallery's balcony down to the forecourt)
+local heightsLadder = ladder(Map.Heights and Map.Heights.Ladder, "Heights") -- (the Gilded Heights': a belvedere down to the boulevard, by the bonfire)
+for _, L in ipairs({ yardLadder, Map.MansionLadder, Map.WingLadder, palaceLadder or false, heightsLadder or false }) do
+	if L then
+		L.UpPrompt.Triggered:Connect(function(player)
+			climbLadder(player, true, L)
+		end)
+		L.DownPrompt.Triggered:Connect(function(player)
+			climbLadder(player, false, L)
+		end)
+	end
+end
+if Config.Debug and Map.Heights then
+	task.defer(require(script:WaitForChild("GildedHeights")).check, Map.Heights.Route)
 end
 
 Map.LockedPrompt.Triggered:Connect(function(player)
@@ -1248,38 +1620,58 @@ Map.FogPrompt.Triggered:Connect(function(player)
 	Warden.start()
 end)
 
--- the rusted key, on the mantel in the one open house in the Lane, and the gate it opens
--- (the last fence before the standing house). Whoever has the key opens it for everyone,
--- and it stays open. The key is kept across deaths (a player attribute).
+-- the drain grate at the sewer's mouth: only lifts for those Mabel has told the trick of it (DrainGrate),
+-- and only for them (GrateUp; SoulsClient lifts it on their screen alone). Kept across deaths.
 do
-	local key, gate = Map.GateKey, Map.TownGate
-	key.Prompt.Triggered:Connect(function(player)
-		if player:GetAttribute("GateKey") then
+	local g, W = Map.DrainGrate, Config.Wick
+	g.Prompt.Triggered:Connect(function(player)
+		if player:GetAttribute("GrateUp") then
 			return
 		end
-		player:SetAttribute("GateKey", true)
-		for _, p in ipairs(key.Parts) do
-			p.Transparency = 1
-			for _, c in ipairs(p:GetChildren()) do
-				if c:IsA("ParticleEmitter") then
-					c.Enabled = false
-				end
+		if not player:GetAttribute("DrainGrate") then
+			FxRemote:FireClient(player, "Message", W.GrateShut)
+			return
+		end
+		player:SetAttribute("GrateUp", true)
+		playSound(g.Model.PrimaryPart, SOUNDS.Unsheath, 1, 0.4)
+		FxRemote:FireClient(player, "Message", W.GrateOpen)
+	end)
+end
+
+-- the rusted key, on the mantel in the one open house in the Lane, and the gate it opens
+-- (the last fence before the standing house). The key opens it, and it stays open. The key is
+-- kept across deaths (a player attribute).
+-- (a small thing lying about, taken: unseen, its glints out - and so again when the save is loaded)
+local function takeThing(id, thing)
+	Save.mark("Pickup_" .. id)
+	for _, p in ipairs(thing.Parts) do
+		p.Transparency = 1
+		for _, c in ipairs(p:GetChildren()) do
+			if c:IsA("ParticleEmitter") then
+				c.Enabled = false
 			end
 		end
-		key.Prompt.Enabled = false
+	end
+	thing.Prompt.Enabled = false
+end
+do
+	local key, gate = Map.GateKey, Map.TownGate
+	Save.on("Pickup_RustedKey", function()
+		takeThing("RustedKey", key)
+	end)
+	key.Prompt.Triggered:Connect(function(player)
+		if player:GetAttribute("RustedKey") then
+			return
+		end
+		player:SetAttribute("RustedKey", true)
+		takeThing("RustedKey", key)
 		playSound(key.Parts[1], SOUNDS.Unsheath, 0.5, 1.6)
 		FxRemote:FireClient(player, "Message", "Rusted Key. Heavy, and old. It looks like it would fit a gate.")
 	end)
 	local opened = false
-	gate.Prompt.Triggered:Connect(function(player)
-		if opened then
-			return
-		end
-		if not player:GetAttribute("GateKey") then
-			FxRemote:FireClient(player, "Message", "Locked. Chained and padlocked. Someone in this town had the key.")
-			return
-		end
+	local function open()
 		opened = true
+		Save.mark("TownGate")
 		gate.Prompt.Enabled = false
 		gate.Wall.CanCollide = false
 		for _, p in ipairs(gate.Lock) do
@@ -1287,7 +1679,6 @@ do
 			p.CanCollide = true
 		end
 		playSound(gate.Lock[#gate.Lock], SOUNDS.Unsheath, 1, 0.5)
-		FxRemote:FireClient(player, "Message", "The rusted lock gives, and the gate grinds open.")
 		for _, leaf in ipairs(gate.Leaves) do
 			local rel = leaf.Hinge:ToObjectSpace(leaf.Model:GetPivot())
 			task.spawn(function()
@@ -1299,6 +1690,18 @@ do
 				end
 			end)
 		end
+	end
+	Save.on("TownGate", open)
+	gate.Prompt.Triggered:Connect(function(player)
+		if opened then
+			return
+		end
+		if not player:GetAttribute("RustedKey") then
+			FxRemote:FireClient(player, "Message", "Locked. Chained and padlocked. Someone in this town had the key.")
+			return
+		end
+		FxRemote:FireClient(player, "Message", "The rusted lock gives, and the gate grinds open.")
+		open()
 	end)
 end
 
@@ -1307,12 +1710,18 @@ end
 do
 	local win = Map.TownWindow
 	local DebrisService = game:GetService("Debris")
+	Save.on("TownWindow", function() -- (broken in this save: gone)
+		for _, p in ipairs(win.Panes) do
+			p:Destroy()
+		end
+	end)
 	win.Prompt.Triggered:Connect(function(player)
 		if not player:GetAttribute("OldBrick") then
 			FxRemote:FireClient(player, "Message", "Old, thick glass. You'd need something heavy to break it.")
 			return
 		end
 		player:SetAttribute("OldBrick", nil)
+		Save.mark("TownWindow")
 		local glass = win.Panes[1]
 		local inward = -glass.CFrame.LookVector
 		playSound(glass, SOUNDS.Impact, 1, 1.7)
@@ -1339,27 +1748,22 @@ end
 -- the old brick, lying on the floor of the standing house at the end of the township
 do
 	local brick = Map.OldBrick
+	Save.on("Pickup_OldBrick", function()
+		takeThing("OldBrick", brick)
+	end)
 	brick.Prompt.Triggered:Connect(function(player)
 		if player:GetAttribute("OldBrick") then
 			return
 		end
 		player:SetAttribute("OldBrick", true)
-		for _, p in ipairs(brick.Parts) do
-			p.Transparency = 1
-			for _, c in ipairs(p:GetChildren()) do
-				if c:IsA("ParticleEmitter") then
-					c.Enabled = false
-				end
-			end
-		end
-		brick.Prompt.Enabled = false
+		takeThing("OldBrick", brick)
 		playSound(brick.Parts[1], SOUNDS.Impact, 0.4, 1.1)
 		FxRemote:FireClient(player, "Message", "Old brick acquired")
 	end)
 end
 
--- the Usher's chest (behind the gate that opens when she dies). Every player loots their
--- own copy of it: opening it shows its contents (SoulsClient's chest panel), and dragging
+-- the Usher's chest (behind the gate that opens when she dies). Opening it shows its contents
+-- (SoulsClient's chest panel), and dragging
 -- a ring onto a ring slot asks here to take it. A ring already in that slot goes back in.
 do
 	local chest = Map.UsherChest
@@ -1374,28 +1778,36 @@ do
 		end
 		FxRemote:FireClient(player, "Chest", contents[player], rings)
 	end
+	local function openLid()
+		if opened then
+			return
+		end
+		opened = true
+		Save.mark("UsherChest")
+		playSound(chest.Prompt.Parent, SOUNDS.Impact, 0.8, 0.6)
+		task.spawn(function()
+			for i = 1, 20 do
+				chest.Lid:PivotTo(chest.Hinge * CFrame.Angles(1.9 * (i / 20), 0, 0) * lidRel)
+				task.wait(1 / 30)
+			end
+		end)
+	end
+	Save.on("UsherChest", openLid)
 	chest.Prompt.Triggered:Connect(function(player)
 		local st = states[player]
 		if not st then
 			return
 		end
 		st.rings = st.rings or {}
-		contents[player] = contents[player] or { "Embellishment" }
+		contents[player] = contents[player] or {} -- (no ring in it any more: just the crank)
 		if not player:GetAttribute("SteelCrank") then -- (the chest holds the crank to the Citadel's gate)
 			player:SetAttribute("SteelCrank", true)
 			FxRemote:FireClient(player, "Message", "Steel Crank. Heavy, geared, cold: the handle of some great winch.")
 		end
-		if not opened then
-			opened = true
-			playSound(chest.Prompt.Parent, SOUNDS.Impact, 0.8, 0.6)
-			task.spawn(function()
-				for i = 1, 20 do
-					chest.Lid:PivotTo(chest.Hinge * CFrame.Angles(1.9 * (i / 20), 0, 0) * lidRel)
-					task.wait(1 / 30)
-				end
-			end)
+		openLid()
+		if #contents[player] > 0 then -- (a ring swapped back in shows the panel; an empty chest doesn't)
+			show(player, st)
 		end
-		show(player, st)
 	end)
 	ActionRemote.OnServerEvent:Connect(function(player, action, id, slot)
 		if action ~= "TakeRing" then
@@ -1430,6 +1842,8 @@ end
 
 Mabel.spawn() -- the girl in the nook (Characters/Mabel.lua)
 Roster.byKind.Taylor.spawn() -- the old tailor by the Crossing (Characters/Taylor.lua)
+Roster.byKind.GildedKing.spawn() -- the old king in the Gilded Ballroom, and its stone dancers (Characters/GildedKing.lua)
+Roster.byKind.KingGilded.spawnStatues() -- every statue in the Palace of Pyralis: him, in stone
 
 for _, pp in ipairs(Map.Messages) do
 	pp.Triggered:Connect(function(player)
@@ -1485,6 +1899,7 @@ local function onCharacter(player, char)
 		end
 		task.wait()
 		char:PivotTo(st.checkpoint)
+		st.placed = char -- (area names wait for this: till now it stood at the start cell's spawn)
 	end)
 
 	task.spawn(function()
@@ -1525,6 +1940,9 @@ local function onCharacter(player, char)
 end
 
 local function onPlayerAdded(player)
+	if RunService:IsStudio() or (game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId) then
+		player:SetAttribute("Dev", true) -- (the dev menu: see isDev)
+	end
 	-- armor changed (found, or picked in the menu): dress for it now (and on every spawn)
 	for _, slot in ipairs(Config.ArmorSlots) do
 		player:GetAttributeChangedSignal("Armor" .. slot):Connect(function()
@@ -1667,6 +2085,7 @@ if Map.Underfire and Map.Underfire.Arena then
 			if (T == nil or T.dead) and not (proxy and proxy.Parent and proxy.Humanoid.Health > 0) then
 				FxRemote:FireAllClients("Banner", "WATCHDOGS FELLED", "Victory")
 				won = true
+				Save.mark("Watchdogs")
 				task.delay(3, openLair)
 				at = Vector3.new(at.X, Ar.Centre.Y + 3, at.Z) -- (on the floor, not on the spire it fell from)
 				for _, sp in ipairs(Ar.Spires or {}) do
@@ -1686,6 +2105,11 @@ if Map.Underfire and Map.Underfire.Arena then
 				end
 			end
 		end
+		Save.on("Watchdogs", function() -- (both slain in this save: gone, and the lair open)
+			won, malDead = true, true
+			model:Destroy()
+			openLair()
+		end)
 		local function flatDist(a, b)
 			return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
 		end
@@ -2333,10 +2757,238 @@ if Map.Underfire and Map.Underfire.Arena then
 	end
 end
 
--- THE GREAT LIFT (Map.Bulwark.Lift: PyralisBulwark), from the Watchdog's Run up to Pyralis Bulwark. Its lever sends it to
--- the other end; the levers at each end call it there. Whoever's standing on its deck rides it, held still on it
+-- THE CENSERY'S MACHINERY (Map.Bulwark.Censery: PyralisBulwark). Blades and censers swinging across its walks and beams,
+-- an arm sweeping one, the bell on the belfry: each moved here, every frame, while anyone's near (each part set to its
+-- pivot's pose x its offset). Whatever swings or sweeps into you shoves you along the way it was going, as fast as it
+-- was moving where it met you - off the walk, if that's where you are; walking into the back of one does nothing. A roll's i-frames carry you through any of it, as with any hit.
 do
-	local Lf = Map.Bulwark and Map.Bulwark.Lift
+	local Cz = Map.Bulwark and Map.Bulwark.Censery
+	local SWING_RATE = 1.15 -- everything that swings or sweeps runs this much faster than its Period/Speed as built
+	local SWING_LEAN = 0.5 -- how much slower the climb is than the fall (0 = even; under 1)
+	if Cz then
+		local hitParams = OverlapParams.new()
+		hitParams.FilterType = Enum.RaycastFilterType.Include
+		local lastHit, awake, nextLook, t0 = {}, false, 0, now()
+		local function strike(hz, t, cf, size, fromFor, level, speed)
+			lastHit[hz] = lastHit[hz] or {}
+			for _, p in ipairs(workspace:GetPartBoundsInBox(cf, size, hitParams)) do
+				local m = p:FindFirstAncestorOfClass("Model")
+				local pl = m and Players:GetPlayerFromCharacter(m)
+				local hrp = pl and m:FindFirstChild("HumanoidRootPart")
+				local way = hrp and (hrp.Position - fromFor(hrp.Position)) -- (the way it's moving at you)
+				local ahead = way and Vector3.new(hrp.Position.X - cf.X, 0, hrp.Position.Z - cf.Z):Dot(Vector3.new(way.X, 0, way.Z)) > -1
+				if ahead and t - (lastHit[hz][pl] or -99) > (hz.Every or 1) then -- (not from behind it, going away)
+					lastHit[hz][pl] = t
+					if hz.Damage == 0 then -- (the blades, the arm: no hurt, only the shove)
+						FxRemote:FireClient(pl, "Shove", way, math.clamp(speed, 8, 40))
+						continue
+					end
+					Core.damagePlayer(pl, hz.Damage, fromFor(hrp.Position), level, math.clamp(speed, 8, 40))
+				end
+			end
+		end
+		RunService.Heartbeat:Connect(function()
+			local t = now() - t0
+			if t >= nextLook then -- (once a second: who's alive, and is anyone near enough to bother)
+				nextLook = t + 1
+				local chars = {}
+				awake = false
+				for _, pl in ipairs(Players:GetPlayers()) do
+					local char, _, hrp = aliveChar(pl)
+					if char then
+						table.insert(chars, char)
+						awake = awake or (hrp.Position - Cz.Center).Magnitude < Cz.Radius
+					end
+				end
+				hitParams.FilterDescendantsInstances = chars
+			end
+			if not awake then
+				return
+			end
+			local parts, cfs = {}, {}
+			for _, hz in ipairs(Cz.Hazards) do
+				local cf, fromFor, speed
+				if hz.Kind == "swing" then -- (about the pivot's own x, its walk's way: the bottom moves along its -z as the angle grows)
+					-- (as if gravity had it: each half-swing climbs slowly out of the bottom and falls back faster - about 62% of
+					-- the time going up, 38% coming down - smooth through the top and the bottom. The phase within a half,
+					-- q, runs from 0 at the bottom through 0.5 at the top to 1 at the bottom again: q = h - k(1 - cos 2πh) / 2π)
+					local u = (t * SWING_RATE / hz.Period + hz.Phase / (2 * math.pi)) % 1
+					local half = u < 0.5 and 0 or 1
+					local h = u * 2 - half
+					local q = h - SWING_LEAN * (1 - math.cos(2 * math.pi * h)) / (2 * math.pi)
+					local ph = (half + q) * math.pi
+					local s = math.sin(ph)
+					-- (how fast its striking end moves: dθ/dt = Amp cos(ph) dph/dt, times its distance from the pivot)
+					local dph = math.pi * (1 - SWING_LEAN * math.sin(2 * math.pi * h)) * 2 * SWING_RATE / hz.Period
+					speed = math.abs(hz.Amp * math.cos(ph) * dph) * hz.HitOffset.Position.Magnitude
+					cf = hz.Base * CFrame.Angles(hz.Amp * s, 0, 0)
+					local way = hz.Base:VectorToWorldSpace(Vector3.new(0, 0, -1)) * (math.cos(ph) >= 0 and 1 or -1)
+					fromFor = function(p)
+						return p - way * 4
+					end
+				else -- "spin": round the world's up; a point's way is up x its offset from the hub
+					cf = hz.Base * CFrame.Angles(0, t * hz.Speed * SWING_RATE, 0)
+					speed = math.abs(hz.Speed * SWING_RATE) * hz.HitSize.X * 0.3 -- (at about the middle of an arm)
+					fromFor = function(p)
+						local r = Vector3.new(p.X - hz.Base.X, 0, p.Z - hz.Base.Z)
+						local way = r.Magnitude > 0.1 and Vector3.yAxis:Cross(r).Unit * math.sign(hz.Speed) or Vector3.xAxis
+						return p - way * 4
+					end
+				end
+				for _, e in ipairs(hz.Parts) do
+					table.insert(parts, e[1])
+					table.insert(cfs, cf * e[2])
+				end
+				strike(hz, t, cf * hz.HitOffset, hz.HitSize, fromFor, "Shove", speed)
+			end
+			workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+		end)
+	end
+end
+
+-- THE BELLS AND THE DRAWBRIDGE (Map.Bulwark.Bells, .Drawbridge: PyralisBulwark). A bell, rung (its prompt: once),
+-- swings and tolls, dying away; once both have rung - the Censery's and the keep's - the palace's drawbridge
+-- falls from its gatehouse onto BR1, its chains paying out with it.
+do
+	local BB = Map.Bulwark
+	if BB and BB.Bells and BB.Drawbridge then
+		local rung = 0
+		local function place(list, cf)
+			local parts, cfs = {}, {}
+			for _, e in ipairs(list) do
+				table.insert(parts, e[1])
+				table.insert(cfs, cf * e[2])
+			end
+			workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+		end
+		local function lower()
+			local D = BB.Drawbridge
+			local deck = D.Parts[1][1]
+			playSound(deck, SOUNDS.Impact, 1, 0.25)
+			FxRemote:FireAllClients("Message", "Far off, chains run out, and something great comes down.")
+			local t0, FALL = now(), 4.5
+			local conn
+			conn = RunService.Heartbeat:Connect(function()
+				local u = math.min((now() - t0) / FALL, 1)
+				local cf = D.Hinge * CFrame.Angles(D.Up * (1 - u * u), 0, 0) -- (slow off the wall, then faster and faster)
+				place(D.Parts, cf)
+				for _, ch in ipairs(D.Chains) do
+					local tip = (cf * ch.Tip).Position
+					ch.Part.Size = Vector3.new(0.45, 0.45, (ch.Anchor - tip).Magnitude)
+					ch.Part.CFrame = CFrame.lookAt((tip + ch.Anchor) / 2, ch.Anchor)
+				end
+				if u >= 1 then
+					conn:Disconnect()
+					local at = (cf * D.Tip).Position
+					playSound(deck, SOUNDS.WatchdogSmash, 1.2, 0.6)
+					Core.burst(at, Color3.fromRGB(90, 80, 70), 30, 0.6, 16)
+					FxRemote:FireAllClients("Shake", at, 0.8)
+				end
+			end)
+		end
+		for i, b in ipairs(BB.Bells) do
+			Save.on("BulwarkBell" .. i, function() -- (rung in this save: still, and its prompt gone; the drawbridge down if both are)
+				b.Prompt.Enabled = false
+				rung += 1
+				if rung == #BB.Bells then
+					lower()
+				end
+			end)
+			b.Prompt.Triggered:Connect(function(player)
+				if not b.Prompt.Enabled then
+					return
+				end
+				b.Prompt.Enabled = false
+				Save.mark("BulwarkBell" .. i)
+				rung += 1
+				local lip = b.Parts[#b.Parts][1]
+				local t0, DUR, PER, AMP = now(), 12, 3.2, 0.6
+				local side = 0
+				local conn
+				conn = RunService.Heartbeat:Connect(function()
+					local t = now() - t0
+					local fade = math.max(0, 1 - t / DUR)
+					local w = t / PER * 2 * math.pi
+					place(b.Parts, b.Base * CFrame.Angles(AMP * fade * math.sin(w), 0, 0))
+					local s = math.cos(w) >= 0 and 1 or -1 -- (it tolls at each end of its swing, as the clapper strikes)
+					if s ~= side and fade > 0.1 then
+						side = s
+						playSound(lip, SOUNDS.Impact, 0.6 + 1.4 * fade, 0.22) -- (as the prison's bell tolls)
+						FxRemote:FireAllClients("Shake", lip.Position, 0.4 * fade)
+					end
+					if t >= DUR then
+						conn:Disconnect()
+						place(b.Parts, b.Base)
+					end
+				end)
+				if rung == #BB.Bells then
+					FxRemote:FireClient(player, "Message", "The last bell tolls out over the lava.")
+					task.delay(3, lower)
+				else
+					FxRemote:FireClient(player, "Message", "The bell tolls out over the lava... somewhere, another is still silent.")
+				end
+			end)
+		end
+	end
+end
+
+-- THE PALACE'S BARRED DOORS (Map.Bulwark.PalaceDoors: PyralisBulwark) - its great doors, and the guard hall's into the
+-- long gallery: each barred on one side. Lifted from there (D.Inside), the beam is set aside and the leaves swing in,
+-- for good - a way back to the bonfire. From the other side they won't budge.
+for i, D in ipairs(Map.Bulwark and Map.Bulwark.PalaceDoors or {}) do
+	do
+		local open = false
+		D.LockedPrompt.Triggered:Connect(function(player)
+			FxRemote:FireClient(player, "Message", open and "The doors stand open." or "Barred. It must open from the other side.")
+		end)
+		local function unbar(player)
+			open = true
+			Save.mark("PalaceDoor" .. i)
+			D.Prompt.Enabled = false
+			D.LockedPrompt.Enabled = false
+			playSound(D.Bar, SOUNDS.Unsheath, 1, 0.3)
+			TweenService:Create(D.Bar, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { CFrame = D.BarAside }):Play()
+			task.delay(0.9, function()
+				playSound(D.Bar, SOUNDS.Impact, 0.8, 0.4)
+				local t0 = now()
+				local conn
+				conn = RunService.Heartbeat:Connect(function()
+					local k = math.min((now() - t0) / 2.4, 1)
+					local e = k * k * (3 - 2 * k)
+					local parts, cfs = {}, {}
+					for _, leaf in ipairs(D.Leaves) do
+						local cf = leaf.Hinge * CFrame.Angles(0, leaf.Angle * e, 0)
+						for _, pe in ipairs(leaf.Parts) do
+							table.insert(parts, pe[1])
+							table.insert(cfs, cf * pe[2])
+						end
+					end
+					workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+					if k >= 1 then
+						conn:Disconnect()
+						playSound(D.Bar, SOUNDS.Impact, 1, 0.3)
+					end
+				end)
+				FxRemote:FireClient(player, "Message", "A shortcut has opened.")
+			end)
+		end
+		Save.on("PalaceDoor" .. i, function()
+			unbar(Save.player)
+		end)
+		D.Prompt.Triggered:Connect(function(player)
+			local _, _, hrp = aliveChar(player)
+			if not open and hrp and D.Inside(hrp.Position) then
+				unbar(player)
+			end
+		end)
+	end
+end
+
+-- THE GREAT LIFT (Map.Bulwark.Lift: PyralisBulwark), from the Watchdog's Run up to Pyralis Bulwark. Its lever sends it to
+-- the other end; the levers at each end call it there. Whoever's standing on its deck rides it, held still on it.
+-- The palace's throne (Map.Bulwark.ThroneLift) is one too: down from the throne hall to the Sunken Court. So's the Gilded Heights'
+-- (Map.Heights.Lift), up out of the hole to the walk round it
+for _, Lf in ipairs({ Map.Bulwark and Map.Bulwark.Lift or false, Map.Bulwark and Map.Bulwark.ThroneLift or false, Map.Heights and Map.Heights.Lift or false }) do
 	if Lf then
 		local moving = false
 		local function go(to)
@@ -2349,13 +3001,13 @@ do
 			for _, pl in ipairs(Players:GetPlayers()) do
 				local char, _, hrp = aliveChar(pl)
 				local rel = char and from:PointToObjectSpace(hrp.Position)
-				if rel and math.abs(rel.X) < 11 and math.abs(rel.Z) < 11 and rel.Y > 0 and rel.Y < 8 then
+				if rel and math.abs(rel.X) < (Lf.HalfX or 11) and math.abs(rel.Z) < (Lf.HalfZ or 11) and rel.Y > 0 and rel.Y < 8 then
 					hrp.AssemblyLinearVelocity = Vector3.zero
 					hrp.Anchored = true
 					table.insert(riders, { pl, hrp, from:ToObjectSpace(hrp.CFrame) })
 				end
 			end
-			local dur = (dest.Position - from.Position).Magnitude / 14 -- (14 studs a second: slow, as such lifts are)
+			local dur = (dest.Position - from.Position).Magnitude / (Lf.Speed or 14) -- (14 studs a second: slow, as such lifts are)
 			for _, rd in ipairs(riders) do
 				FxRemote:FireClient(rd[1], "Grabbed", dur + 0.6)
 				local st = states[rd[1]]
@@ -2365,22 +3017,34 @@ do
 			end
 			playSound(Lf.Deck, SOUNDS.Impact, 2.5, 0.4)
 			task.wait(0.6)
+			-- every client plays the ride itself, every frame (stepped from here, the deck and its riders only reached
+			-- them a few times a second, out of step with each other: the riders bounced on it); the deck moves here only
+			-- once, where it ends
+			local carried = {}
+			for _, e in ipairs(Lf.Parts) do
+				table.insert(carried, { e[1], e[2] })
+			end
+			for _, rd in ipairs(riders) do
+				table.insert(carried, { rd[2], rd[3] })
+			end
+			FxRemote:FireAllClients("Ride", { Parts = carried, From = from, Dest = dest, Dur = dur })
+			-- the riders themselves carried here too, every step: where the server has them is where enemies aim and hit
+			-- (left at the start, someone riding down was still standing up top as far as everything up there knew)
 			local t0 = os.clock()
-			while true do
-				local a = math.clamp((os.clock() - t0) / dur, 0, 1)
-				local cf = from:Lerp(dest, a * a * (3 - 2 * a))
-				for _, e in ipairs(Lf.Parts) do
-					e[1].CFrame = cf * e[2]
-				end
+			while os.clock() - t0 < dur do
+				local k = (os.clock() - t0) / dur
+				local cf = from:Lerp(dest, k * k * (3 - 2 * k))
 				for _, rd in ipairs(riders) do
 					if rd[2].Parent then
 						rd[2].CFrame = cf * rd[3]
 					end
 				end
-				if a >= 1 then
-					break
-				end
 				RunService.Heartbeat:Wait()
+			end
+			for _, e in ipairs(carried) do
+				if e[1].Parent then
+					e[1].CFrame = dest * e[2]
+				end
 			end
 			Lf.At = to
 			playSound(Lf.Deck, SOUNDS.Impact, 2.5, 0.5)
@@ -2404,6 +3068,155 @@ do
 			task.spawn(go, "Top")
 		end)
 	end
+end
+
+-- THE GREAT STAIR (Map.Heights.Stair: GildedHeights). Once someone has all three keys, the beaten Silver Knight is moved to the
+-- middle of his sand (when nobody's there to see it); and the first time such a player is on the sand with him there, it comes
+-- down in a cutscene. It stays down for good.
+local Stair = Map.Heights and Map.Heights.Stair
+if Stair then
+	local skipEvent = Instance.new("RemoteEvent")
+	skipEvent.Name = "HeightsStairSkip"
+	skipEvent.Parent = ReplicatedStorage
+	local held, skipped = nil, false
+	skipEvent.OnServerEvent:Connect(function(pl)
+		if held and held[pl] then
+			skipped = true
+		end
+	end)
+	local function reveal()
+		for _, f in ipairs({ Stair.Steps, Stair.Deck }) do
+			for _, p in ipairs(f:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.Transparency, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = 0, p:GetAttribute("Collide"), true, true, true
+				elseif p:IsA("Light") then
+					p.Enabled = true
+				end
+			end
+		end
+		for _, p in ipairs(Stair.Gate) do
+			p:Destroy()
+		end
+		Save.mark("GreatStair")
+	end
+	Save.on("GreatStair", function() -- (down in this save: down, the Silver Knight kneeling under it in the middle)
+		reveal()
+		Champion.centreFallen()
+	end)
+	local function descend()
+		local C = Stair.Centre
+		local V, look = Vector3.new, CFrame.lookAt
+		local DELAY, DUR = 6.5, 15
+		local shots = {
+			{ look(C + V(-30, 3, 8), C + V(0, 4, 0)), look(C + V(-24, 3.5, 5), C + V(0, 7, 0)), 3.5 }, -- him, kneeling, the keys' lights rising round him
+			{ look(C + V(13, 2.5, 3), C + V(0, 40, 0)), look(C + V(10, 3, 6), C + V(0, 110, 0)), 3.5 }, -- up the hole after them
+			{ look(C + V(40, 55, 14), C + V(0, Stair.Plane - C.Y, 0)), look(C + V(36, 72, 20), C + V(0, Stair.Plane - C.Y - 12, 0)), 4 }, -- the disc opens, the tip comes through
+			{ look(C + V(-20, 78, 38), C + V(0, 60, 0)), look(C + V(-40, 40, 14), C + V(0, 35, 0)), 6 }, -- round it, going down with it
+			{ look(C + V(38, 3, -8), C + V(0, 34, 0)), look(C + V(38, 2.5, 9), C + V(0, 22, 0)), 5.5 }, -- from the sand as it lands
+			{ look(C + V(39, 5, 2), C + V(0, 10, 0)), look(C + V(38, 60, -14), C + V(0, 96, 0)), 5.5 }, -- and up the whole of it, to the light
+		}
+		local total = 28
+		held, skipped = {}, false
+		for _, pl in ipairs(Players:GetPlayers()) do
+			local char, _, hrp = aliveChar(pl)
+			local st = states[pl]
+			if char and st and Champion.inArena(hrp.Position) then
+				local flatTo = V(hrp.Position.X - C.X, 0, hrp.Position.Z - C.Z)
+				if flatTo.Magnitude < 37.5 then -- (out from under where it lands)
+					local out = flatTo.Magnitude > 0.1 and flatTo.Unit or V(1, 0, 0)
+					char:PivotTo(CFrame.lookAt(C + out * 37.5 + V(0, 3.2, 0), C + V(0, 3.2, 0)))
+				end
+				held[pl] = hrp
+				Core.setAction(st, now(), total, total, total)
+				st.iStart, st.iEnd = now(), now() + total + 0.5
+				st.healing = false
+				Core.cancelSwing(st)
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.Anchored = true
+				FxRemote:FireClient(pl, "Grabbed", total)
+				FxRemote:FireClient(pl, "Cutscene", shots, "HeightsStairSkip")
+			end
+		end
+		FxRemote:FireAllClients("StairDescend", { Steps = Stair.Steps, Deck = Stair.Deck, Centre = C, Height = Stair.Height, Turns = Stair.Turns, Plane = Stair.Plane, Delay = DELAY, Dur = DUR })
+		local function sayAll(line)
+			for pl in pairs(held) do
+				FxRemote:FireClient(pl, "Say", Config.Champion.Name2, line)
+			end
+		end
+		local function rumble(strength, volume, pitch)
+			FxRemote:FireAllClients("Shake", C, strength)
+			for _, hrp in pairs(held) do
+				playSound(hrp, SOUNDS.Impact, volume, pitch)
+			end
+		end
+		local t0, nextRumble, said1, said2, landed = now(), DELAY, false, false, false
+		while now() - t0 < total and not skipped do
+			local t = now() - t0
+			if not said1 and t > 0.8 then
+				said1 = true
+				sayAll(Config.Champion.StairLines[1])
+			end
+			if not said2 and t > DELAY + DUR + 1.5 then
+				said2 = true
+				sayAll(Config.Champion.StairLines[2])
+			end
+			if t >= nextRumble and t < DELAY + DUR then
+				nextRumble += 1.2
+				rumble(0.28, 1.4, 0.22)
+			end
+			if not landed and t >= DELAY + DUR then
+				landed = true
+				rumble(1.2, 3, 0.3)
+				for deg = 0, 315, 45 do
+					Core.dustCloud(C + V(math.cos(math.rad(deg)) * 26, 0.6, math.sin(math.rad(deg)) * 26), 12, 26)
+				end
+			end
+			task.wait()
+		end
+		reveal()
+		FxRemote:FireAllClients("StairDone")
+		for pl, hrp in pairs(held) do
+			if skipped and states[pl] then
+				Core.setAction(states[pl], now(), 0, 0, 0)
+			end
+			if hrp.Parent then
+				hrp.Anchored = false
+				pcall(function()
+					hrp:SetNetworkOwner(pl)
+				end)
+			end
+		end
+		held = nil
+		if Config.Debug then
+			require(script:WaitForChild("GildedHeights")).check({ { Name = "the Great Stair, sand to the arch", Points = Stair.Way } })
+		end
+	end
+	task.spawn(function()
+		while true do
+			task.wait(0.5)
+			if Save.done("GreatStair") then
+				return
+			end
+			if Champion.state() == "dead" then
+				local somebody, nearly = false, false
+				for _, pl in ipairs(Players:GetPlayers()) do
+					nearly = nearly or (pl:GetAttribute("FlameKey") and pl:GetAttribute("FoulKey"))
+					local char, _, hrp = aliveChar(pl)
+					if char and pl:GetAttribute("SilverKey") and pl:GetAttribute("FlameKey") and pl:GetAttribute("FoulKey") and Champion.inArena(hrp.Position) then
+						somebody = true
+					end
+				end
+				if not Champion.fallenCentred() then
+					if nearly and not Champion.anyoneInArena() then -- (out of everyone's sight)
+						Champion.centreFallen()
+					end
+				elseif somebody then
+					descend()
+					return
+				end
+			end
+		end
+	end)
 end
 
 -- falls that kill: the chasm beyond the township, the Maw of Pyralis's lava
@@ -2433,6 +3246,7 @@ local function underfireDescent(player, st, char, hrp, quick)
 		return
 	end
 	st.underfireSeen = true
+	Save.mark("UnderfireSeen")
 	local P0, L = hrp.Position, D.Landing.Position
 	local y0 = P0.Y
 	-- {time, position}: out to the lip, a pause, a step back, a pause, the run-up; the leap is at JUMP
@@ -2516,6 +3330,109 @@ local function underfireDescent(player, st, char, hrp, quick)
 	end)
 end
 
+-- Ossaria herself, waiting in the court under it (before Save.replay: her leaving is a saved event)
+require(script:WaitForChild("Ossaria")).init(Core)
+-- ambushes and traps at four points along the way (once the whole map's built: each checks its spots against it)
+require(script:WaitForChild("Ambush")).init(Core, Enemies)
+
+-- The pit in the Decayed Palace's throne hall (Map.OssariaPit), where Pyralis's throne lift was: the first time you
+-- drop into it, a cutscene - you fall away into the dark, plunge out through the court's vault, and slam down on the old
+-- lift's landing; you lie there, then rise, and the half-rotted court opens out before you. After that it's just a fall.
+local function ossariaDescent(player, st, char, hrp)
+	local O = Map.OssariaPit
+	st.ossariaSeen = true
+	Save.mark("OssariaPit")
+	local V, look = Vector3.new, CFrame.lookAt
+	local function alive()
+		return hrp.Parent and player.Character == char
+	end
+	local P0, L = hrp.Position, O.Landing.Position
+	local c, F, Top = V(L.X, 0, L.Z), L.Y, O.Top
+	local FALL = 3.3 -- (an ease-in drop: slow at the lip, fastest as you hit)
+	local shots = {
+		{ look(c + V(0, Top + 10, -16), c + V(0, Top - 10, 2)), look(c + V(0, Top + 8, -12), c + V(0, Top - 24, 2)), 1.3 }, -- over the lip: down into the black
+		{ look(c + V(-22.5, F + 10, -14), c + V(0, Top - 34, 0)), look(c + V(-20.5, F + 8, -12), c + V(0, Top - 52, 0)), 1.1 }, -- the court, up at the vault: out of the hole
+		{ look(c + V(-12.5, F + 4.5, -8), c + V(0, F + 1.4, 0)), look(c + V(-11, F + 4, -7), c + V(0, F + 0.9, 0)), 1.15 }, -- low, at the landing: the impact
+		{ look(c + V(-7, F + 3, -6), c + V(0, F + 0.4, 0)), look(c + V(-5.5, F + 2.4, -4.5), c + V(0, F + 0.8, 0)), 2.75 }, -- close: lying still, then stirring
+		{ look(c + V(7.5, F + 5.4, 5), V(40, F + 2.4, 744)), look(c + V(17.5, F + 16.4, 10), V(10, F + 6.4, 740)), 4 }, -- up and back over him: the court
+	}
+	local total = 0
+	for _, shot in ipairs(shots) do
+		total += shot[3]
+	end
+	st.ossariaAt = now() + total -- (her bar waits for the cutscene's end)
+	-- her court's air on you from the first frame of it, under a dip to black: when you first see the court, and her
+	-- in it, its light is already what it will be (below: RottedAir)
+	st.ossariaFalling = true
+	player:SetAttribute("RottedAir", true)
+	FxRemote:FireClient(player, "Flash", Color3.new(0, 0, 0), 0.5, 0.2)
+	task.delay(total, function()
+		st.ossariaFalling = nil
+	end)
+	Core.setAction(st, now(), total, total, total)
+	st.iStart, st.iEnd = now(), now() + total + 0.5
+	st.healing = false
+	Core.cancelSwing(st)
+	hrp.Anchored = true
+	FxRemote:FireClient(player, "Grabbed", total)
+	FxRemote:FireClient(player, "Cutscene", shots)
+	local function bp(name, blend)
+		char:SetAttribute("BP", name)
+		char:SetAttribute("BPT", blend)
+		char:SetAttribute("BPN", (char:GetAttribute("BPN") or 0) + 1)
+	end
+	for _, e in ipairs({ { 0, "Air", 0.12 }, { FALL, "Kneel", 0.04 }, { FALL + 2.6, "Idle", 0.9 } }) do
+		task.delay(e[1], function()
+			if alive() then
+				bp(e[2], e[3])
+			end
+		end)
+	end
+	task.delay(FALL, function() -- the thud
+		if alive() then
+			playSound(hrp, SOUNDS.WatchdogSmash, 1, 0.55)
+			playSound(hrp, SOUNDS.Impact, 1, 0.5)
+			FxRemote:FireClient(player, "Shake", L, 1.6)
+			FxRemote:FireClient(player, "Flash", Color3.new(0, 0, 0), 0.9, 0.08)
+			Core.dustCloud(L - V(0, 3, 0), 7, 26)
+			Core.debrisChunks(L - V(0, 3, 0), 10, 28)
+		end
+	end)
+	task.spawn(function()
+		local t0, prev, last = os.clock(), P0, os.clock()
+		local face = O.Landing.LookVector
+		while alive() do
+			local t = os.clock() - t0
+			if t >= total then
+				break
+			end
+			local p, dir
+			if t < FALL then
+				local k = t / FALL
+				local h = P0:Lerp(L, k * k * (3 - 2 * k))
+				p = V(h.X, P0.Y + (L.Y - P0.Y) * k * k, h.Z)
+				local yaw = t * 1.4 -- (turning slowly as you go)
+				dir = V(math.cos(yaw), 0, math.sin(yaw))
+			else
+				p, dir = L, face
+			end
+			char:PivotTo(CFrame.lookAt(p, p + dir))
+			local now2 = os.clock()
+			hrp.AssemblyLinearVelocity = t < FALL and (p - prev) / math.max(now2 - last, 1 / 60) or V()
+			prev, last = p, now2
+			RunService.Heartbeat:Wait()
+		end
+		if alive() then
+			bp("Idle", 0.3)
+			char:PivotTo(O.Landing)
+			hrp.Anchored = false
+			pcall(function()
+				hrp:SetNetworkOwner(player)
+			end)
+		end
+	end)
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	local t = now()
 	for player, st in pairs(states) do
@@ -2536,7 +3453,7 @@ RunService.Heartbeat:Connect(function(dt)
 			-- (and the sunk lava of the Maw of Pyralis, beneath the Fallen Cellblock: DEADLY)
 			local pos = hrp.Position
 			for _, ch in ipairs(DEADLY) do
-				if pos.Y < ch.MaxY and pos.X > ch.MinX and pos.X < ch.MaxX and pos.Z > ch.MinZ and pos.Z < ch.MaxZ then
+				if pos.Y < ch.MaxY and (not ch.MinY or pos.Y > ch.MinY) and pos.X > ch.MinX and pos.X < ch.MaxX and pos.Z > ch.MinZ and pos.Z < ch.MaxZ then
 					local _, hum = aliveChar(player)
 					if hum then
 						hum.Health = 0
@@ -2549,7 +3466,11 @@ RunService.Heartbeat:Connect(function(dt)
 			if Bw and pos.Y < Bw.FallY and pos.Y > -40 then
 				local sh = Bw.Shaft
 				local inShaft = pos.X > sh[1] and pos.X < sh[3] and pos.Z > sh[2] and pos.Z < sh[4]
-				if not inShaft or (not hrp.Anchored and hrp.AssemblyLinearVelocity.Y < -60) then
+				local safe = false -- (the rooms under the palace: the Sunken Court and the throne lift's shaft down to it)
+				for _, q in ipairs(Bw.Safe or {}) do
+					safe = safe or (pos.X > q[1] and pos.X < q[3] and pos.Z > q[2] and pos.Z < q[4] and pos.Y > 6)
+				end
+				if not safe and (not inShaft or (not hrp.Anchored and hrp.AssemblyLinearVelocity.Y < -60)) then
 					for _, q in ipairs(Bw.Falls) do
 						if pos.X > q[1] and pos.X < q[3] and pos.Z > q[2] and pos.Z < q[4] then
 							local _, hum = aliveChar(player)
@@ -2561,15 +3482,45 @@ RunService.Heartbeat:Connect(function(dt)
 					end
 				end
 			end
-			local zone = zoneAt(hrp.Position)
+			local zone = st.placed == char and zoneAt(hrp.Position) or st.zone
 			local D = Map.Underfire
 			if D and t - (st.underfireAt or -100) > 4 then
 				local g = D.Gate
-				if not st.underfireSeen and pos.X >= g.MinX and pos.X <= g.MaxX and pos.Z >= g.MinZ and pos.Z <= g.MaxZ and pos.Y > -5 then
+				if not st.underfireSeen and not Save.done("UnderfireSeen") and pos.X >= g.MinX and pos.X <= g.MaxX and pos.Z >= g.MinZ and pos.Z <= g.MaxZ and pos.Y > -5 then
 					task.spawn(underfireDescent, player, st, char, hrp)
 				elseif pos.Y < D.Pit.Y + 1 and (pos.X - D.Pit.X) ^ 2 + (pos.Z - D.Pit.Z) ^ 2 < 25 then
 					task.spawn(underfireDescent, player, st, char, hrp, true) -- (into the pit's mouth, any time after)
 				end
+			end
+			local O = Map.OssariaPit
+			if O then
+				if not st.ossariaSeen and not Save.done("OssariaPit") and pos.Y < O.Top - 2 and pos.Y > O.Top - 30 and pos.X > O.MinX and pos.X < O.MaxX and pos.Z > O.MinZ and pos.Z < O.MaxZ then
+					task.spawn(ossariaDescent, player, st, char, hrp)
+				end
+				-- her bar, full, while you're in her court and she's still in it, or once she's come down in the ruined
+				-- colosseum (O.Arena: Ossaria.luau), while you're out on its sand (only switched by this, so another boss's
+				-- are left alone)
+				local A = O.Arena
+				local bar = t >= (st.ossariaAt or 0) and (st.zone == O.Zone and not Save.done("OssariaFled")
+					or A ~= nil and Vector3.new(pos.X - A.X, 0, pos.Z - A.Z).Magnitude < 46 and math.abs(pos.Y - A.Y) < 20)
+				if bar ~= (st.ossariaBar == true) then
+					st.ossariaBar = bar
+					if bar then
+						local nb = A ~= nil and O.ArenaBar or Config.Ossaria -- (once she's been challenged: her knight's)
+						ReplicatedStorage:SetAttribute("BossName", nb.Name)
+						ReplicatedStorage:SetAttribute("BossMaxHP", nb.HP)
+						ReplicatedStorage:SetAttribute("BossHP", nb.HP)
+					end
+					ReplicatedStorage:SetAttribute("BossActive", bar)
+				end
+			end
+			-- THE ROTTED COURT'S AIR (the client's RottedAir): no sun and no sky in it at all, only what's lit down there.
+			-- Roblox works out that a room is roofed over a moment AFTER the camera gets there, and till then lights it
+			-- like open ground; with nothing of the sky's to let in, there's no such moment. On for as long as you're
+			-- in her court (and from the top of the fall into it); off while her meeting's camera is out under the sky
+			local rotted = O ~= nil and (st.zone == O.Zone or st.ossariaFalling == true) and not O.Away
+			if player:GetAttribute("RottedAir") ~= rotted then
+				player:SetAttribute("RottedAir", rotted)
 			end
 			local beneath = st.zone == "Maw of Pyralis"
 			if player:GetAttribute("Beneath") ~= beneath then
@@ -2578,6 +3529,13 @@ RunService.Heartbeat:Connect(function(dt)
 			local smoulder = st.zone == "Pyralis Bulwark"
 			if player:GetAttribute("Smoulder") ~= smoulder then
 				player:SetAttribute("Smoulder", smoulder) -- (the client dims it a little, smoky and red)
+			end
+			local courtDark = st.zone == "The Sunken Court"
+			if player:GetAttribute("CourtDark") ~= courtDark then
+				player:SetAttribute("CourtDark", courtDark) -- (the king's arena: the client turns it right down)
+			end			local gleam = st.zone == "The Gilded Heights" or st.zone == "The Gilded Ballroom"
+			if player:GetAttribute("Gleam") ~= gleam then
+				player:SetAttribute("Gleam", gleam) -- (the client gives it its own clear, bright noon)
 			end
 			if zone and zone ~= st.zone then
 				st.zone = zone
@@ -2611,9 +3569,16 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 ---------------------------------------------------------------------------
--- go
+-- go: the save first (GameServer/Save: one player to a server, and the world is theirs), then the world as they left
+-- it - each boss beaten or standing, the one-time events replayed - and them woken at the last bonfire they rested at
 ---------------------------------------------------------------------------
-Enemies.respawn()
+local owner = Players:GetPlayers()[1] or Players.PlayerAdded:Wait()
+local loaded = Save.load(owner)
+Save.quiet = true -- (no sounds, and the client holds its messages a moment: none of what follows is news)
+FxRemote:FireClient(owner, "Hush", 6)
+task.delay(6, function()
+	Save.quiet = false
+end)
 local bossOk, bossErr = pcall(Warden.spawn)
 if not bossOk then
 	warn("[DGUS] failed to spawn boss: " .. tostring(bossErr))
@@ -2634,4 +3599,25 @@ local usherOk, usherErr = pcall(Oculast.spawn)
 if not usherOk then
 	warn("[DGUS] failed to spawn Oculast: " .. tostring(usherErr))
 end
-print(string.format("[DGUS] ready: %d enemies, boss %s", Enemies.count(), Warden.model() and "spawned" or "MISSING"))
+Save.replay() -- (after the bosses: the Great Stair's needs the Silver Knight on his knees; before the enemies: the King's)
+Enemies.respawn()
+if loaded then
+	for i, bf in ipairs(Map.Bonfires) do
+		if owner:GetAttribute("Bonfire_" .. i) == bf.Name then
+			lightBonfire(bf)
+		else
+			owner:SetAttribute("Bonfire_" .. i, nil) -- (not this bonfire's: the map has changed under the save)
+		end
+	end
+	local st = states[owner]
+	local at = Map.Bonfires[owner:GetAttribute("AtBonfire") or 0]
+	if st then
+		st.checkpoint = at and at.Lit and at.CF or st.checkpoint
+		st.rings = {}
+		for i = 1, P.RingSlots do
+			st.rings[i] = owner:GetAttribute("Ring" .. i)
+		end
+	end
+	owner:LoadCharacter() -- (up again where they rested, in what they wore)
+end
+print(string.format("[DGUS] ready: %d enemies, boss %s, save %s", Enemies.count(), Warden.isDead() and "beaten" or Warden.model() and "spawned" or "MISSING", loaded and "loaded" or "none"))

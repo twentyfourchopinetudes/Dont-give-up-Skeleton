@@ -156,13 +156,31 @@ function M.spawn()
 		local t = talk[player] or { n = 0 }
 		talk[player] = t
 		local line
-		if Roster.byKind.Warden and Roster.byKind.Warden.isDead() and AFTER_WARDEN and AFTER_WARDEN ~= "" and not t.warden then
+		local RING = W.RingLines or {}
+		if player:GetAttribute("MabelRing") and player:GetAttribute("MabelQuest") and not player:GetAttribute("MabelKnows") and #RING > 0 then -- (Giles's questline)
+			t.ring = (t.ring or 0) + 1
+			line = RING[t.ring]
+			if t.ring >= #RING then
+				player:SetAttribute("MabelKnows", true) -- (back to Giles, in the grand gate's passage)
+			end
+		elseif (player:GetAttribute("GilesDead") or player:GetAttribute("GilesScrap")) and not player:GetAttribute("MabelMourned") and W.GriefLines then
+			t.grief = (t.grief or 0) + 1 -- (Ossaria had him: she grieves, and gives you what he would have)
+			line = W.GriefLines[t.grief] or W.GriefLines[#W.GriefLines]
+			if t.grief >= #W.GriefLines then
+				player:SetAttribute("MabelMourned", true)
+				player:SetAttribute("Stat_Nobility", (player:GetAttribute("Stat_Nobility") or 0) + 1)
+				FxRemote:FireClient(player, "Message", W.GriefGift or "+1 Nobility")
+			end
+		elseif Roster.byKind.Warden and Roster.byKind.Warden.isDead() and AFTER_WARDEN and AFTER_WARDEN ~= "" and not t.warden then
 			t.warden = true
 			line = AFTER_WARDEN
 		elseif Roster.byKind.Usher and Roster.byKind.Usher.isDead() and AFTER_USHER and AFTER_USHER ~= "" and not t.usher then
 			t.usher = true
 			line = AFTER_USHER
 			give(player, "DarkHood") -- relieved: the hood that goes with her cloak
+		elseif t.n >= #INTRO and not player:GetAttribute("DrainGrate") and W.GrateLine then
+			line = W.GrateLine -- (the grate across the drain's mouth: no way on without this)
+			player:SetAttribute("DrainGrate", true)
 		elseif t.n >= #INTRO and not player:GetAttribute("DarkCloak") then
 			line = W.CloakLine or "..."
 			give(player, "DarkCloak")
@@ -182,8 +200,23 @@ function M.spawn()
 			end
 		end)
 	end)
+	-- the first time you come by her doorway without having met her, she calls you in
+	local called = {}
+	task.spawn(function()
+		while model.Parent do
+			task.wait(0.5)
+			for _, pl in ipairs(Players:GetPlayers()) do
+				local hrp = Map.WickDoor and not called[pl] and not talk[pl] and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+				if hrp and (hrp.Position - Map.WickDoor).Magnitude < 11 then
+					called[pl] = true
+					FxRemote:FireClient(pl, "Say", W.Name or "Wick", W.CallOut or "Psst...")
+				end
+			end
+		end
+	end)
 	Players.PlayerRemoving:Connect(function(pl)
 		talk[pl] = nil
+		called[pl] = nil
 	end)
 end
 

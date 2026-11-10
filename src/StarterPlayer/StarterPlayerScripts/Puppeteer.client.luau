@@ -194,9 +194,9 @@ local function update(model, dt, now, isLocal)
 	local v = root.AssemblyLinearVelocity
 	local flatV = Vector3.new(v.X, 0, v.Z)
 	local speed = flatV.Magnitude / s
-	local target = math.clamp(speed / 11, 0, 1)
+	local target = math.clamp(speed / (D.walkRef or 11), 0, 1) -- (a giant moving slowly for his size still walks: D.walkRef)
 	st.walk += (target - st.walk) * (1 - math.exp(-dt * 8))
-	st.phase += dt * speed * 0.55
+	st.phase += dt * speed * (D.cadence or 0.55)
 	local ctx = {
 		phase = st.phase,
 		walk = st.walk,

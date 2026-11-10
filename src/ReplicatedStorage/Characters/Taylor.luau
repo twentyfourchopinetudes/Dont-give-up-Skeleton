@@ -122,8 +122,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Map, FxRemote, now, bodyPose, applyLimbGroup, RigBuilder
+local makeCorpse, ragdoll
+local Debris = game:GetService("Debris")
 
-function M.spawn()
+-- one Giles, sat at cf: his rig, his glow, his prompt; onTalk(player) -> the line he says. He calls out once to
+-- anyone who comes within CallRange (if callOut, and only while canCall() says so), so nobody walks past him.
+local function seat(cf, callOut, canCall, onTalk)
 	local NPCs = workspace:FindFirstChild("NPCs") or Instance.new("Folder") -- (shared: one folder only)
 	NPCs.Name = "NPCs" -- animated by the Puppeteer like everyone else, but never hittable
 	NPCs.Parent = workspace
@@ -137,20 +141,24 @@ function M.spawn()
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	hum.HipHeight = model:GetAttribute("HipHeight")
 	local root = model:FindFirstChild("HumanoidRootPart")
-	model:PivotTo(Map.Taylor + Vector3.new(0, 3, 0))
+	model:PivotTo(cf + Vector3.new(0, 3, 0))
 	root.Anchored = true
-	-- a faint glow in the dark of the shack: enough to find him, not enough to see him by
+	-- a warm glow round him and a candle at his feet: you see him from the walkway
 	local l = Instance.new("PointLight")
 	l.Color = Color3.fromRGB(255, 190, 120)
-	l.Range = 7
-	l.Brightness = 0.35
+	l.Range = 14
+	l.Brightness = 0.9
 	l.Parent = root
+	local candle = Instance.new("Part")
+	candle.Name = "GilesCandle"
+	candle.Size, candle.Material, candle.Color = Vector3.new(0.3, 0.7, 0.3), Enum.Material.Neon, Color3.fromRGB(255, 214, 150)
+	candle.CFrame = cf * CFrame.new(1.4, -0.2, -1.2)
+	candle.Anchored, candle.CanCollide, candle.CanQuery, candle.CanTouch = true, false, false, false
+	candle.Parent = model
 	local actor = { model = model, scale = 1 }
 	bodyPose(actor, "TaylorSit", 0.1)
 
 	local T = Config.Taylor or {}
-	local INTRO = T.Intro or {}
-	local MORE = T.More or { "..." }
 	local pp = Instance.new("ProximityPrompt")
 	pp.ActionText = "Talk"
 	pp.ObjectText = T.Name or "Wretch Giles"
@@ -159,19 +167,8 @@ function M.spawn()
 	pp.RequiresLineOfSight = false
 	pp.Parent = root
 
-	local heard = {} -- per player: lines heard
 	local busyUntil = 0
-	pp.Triggered:Connect(function(player)
-		local n = (heard[player] or 0) + 1
-		heard[player] = n
-		local line = n <= #INTRO and INTRO[n] or MORE[(n - #INTRO - 1) % #MORE + 1]
-		-- you've put enough of them to rest: he gives you the armor (his own outfit, in your size)
-		if n > #INTRO and not player:GetAttribute("Motley") and (player:GetAttribute("Kills") or 0) >= (T.ArmorKills or 5) then
-			line = T.ArmorLine or line
-			player:SetAttribute("Motley", true)
-			Config.wearArmor(player, "Motley") -- (worn straight away: init.server dresses you)
-			FxRemote:FireClient(player, "Message", Config.Armor.Motley.Name .. ". A tall patchwork hat and a coat of patches. Press T to choose weapons and armor.")
-		end
+	local function say(player, line)
 		FxRemote:FireClient(player, "Say", T.Name or "Wretch Giles", line)
 		bodyPose(actor, (string.find(line, "Ha[%s!%.]") or string.find(line, "He he")) and "TaylorLaugh" or "TaylorLean", 0.25)
 		busyUntil = now() + 2.5
@@ -180,10 +177,198 @@ function M.spawn()
 				bodyPose(actor, "TaylorSit", 0.6)
 			end
 		end)
+	end
+	pp.Triggered:Connect(function(player)
+		if player:GetAttribute("GilesDead") then -- (gone, for you: SoulsClient hides him)
+			return
+		end
+		local line = onTalk(player)
+		if line then
+			say(player, line)
+		end
+	end)
+	model:SetAttribute("Giles", "Alive") -- (SoulsClient: hidden from those who've seen him die)
+	if callOut then
+		local called = {}
+		task.spawn(function()
+			while model.Parent do
+				task.wait(0.5)
+				if canCall() then
+					for _, pl in ipairs(Players:GetPlayers()) do
+						local hrp = pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+						if hrp and not called[pl] and not pl:GetAttribute("GilesDead") and (hrp.Position - root.Position).Magnitude < (T.CallRange or 45) then
+							called[pl] = true
+							say(pl, callOut)
+						end
+					end
+				end
+			end
+		end)
+		Players.PlayerRemoving:Connect(function(pl)
+			called[pl] = nil
+		end)
+	end
+	return root
+end
+
+function M.spawn()
+	local T = Config.Taylor or {}
+	local INTRO = T.Intro or {}
+	local MORE = T.More or { "..." }
+	local AFTER = T.AfterArmor or MORE
+	local heard = {} -- per player: lines heard (here; and by the gate: woodHeard)
+	-- the King's asked after him (KingAsked): his answer, at either of him, and at its end the Mabel questline begun
+	-- (MabelQuest); after that, his plea again until her ring's been found. nil: nothing to say about it
+	local KL = T.KingLines or {}
+	local function kingTalk(player)
+		if not player:GetAttribute("KingAsked") or #KL == 0 then
+			return nil
+		end
+		if not player:GetAttribute("MabelQuest") then
+			local k = (player:GetAttribute("GilesKingTalk") or 0) + 1
+			player:SetAttribute("GilesKingTalk", k)
+			if k >= #KL then
+				player:SetAttribute("MabelQuest", true)
+			end
+			return KL[k] or KL[#KL]
+		end
+		return nil
+	end
+	-- by the Crossing: his intro; enough kills after it -> his armor; then small talk until the King's asked after him
+	seat(Map.Taylor, T.CallOut, function()
+		return true
+	end, function(player)
+		-- the King's asked after him: nothing but the Mabel questline from here on (none of his old talk)
+		if player:GetAttribute("KingAsked") then
+			local k = kingTalk(player)
+			if k then
+				return k
+			end
+			if not player:GetAttribute("GateKey") then
+				player:SetAttribute("GateKey", true)
+				FxRemote:FireClient(player, "Message", T.KeyItem or "Gate Key.")
+				return T.QuestKey or KL[#KL]
+			end
+			if player:GetAttribute("MabelKnows") then
+				return T.ToGate or KL[#KL]
+			end
+			return player:GetAttribute("MabelRing") and (T.Wood or {}).RingLine or KL[#KL]
+		end
+		local n = (heard[player] or 0) + 1
+		heard[player] = n
+		if n <= #INTRO then
+			if n == #INTRO and player:GetAttribute("GilesKillsFrom") == nil then
+				player:SetAttribute("GilesKillsFrom", player:GetAttribute("Kills") or 0) -- (only kills after he's asked count)
+			end
+			return INTRO[n]
+		end
+		if not player:GetAttribute("Motley") then
+			local since = (player:GetAttribute("Kills") or 0) - (player:GetAttribute("GilesKillsFrom") or 0)
+			if since >= (T.ArmorKills or 5) then -- you've put enough of them to rest
+				player:SetAttribute("Motley", true)
+				Config.wearArmor(player, "Motley") -- (worn straight away: init.server dresses you)
+				FxRemote:FireClient(player, "Message", Config.Armor.Motley.Name .. ". A tall patchwork hat and a coat of patches. Press T to choose weapons and armor.")
+				return T.ArmorLine or MORE[1]
+			end
+			return MORE[(n - #INTRO - 1) % #MORE + 1]
+		end
+		return AFTER[(n - 1) % #AFTER + 1] -- (the grand gate's key waits for the King's errand: QuestKey, above)
 	end)
 	Players.PlayerRemoving:Connect(function(pl)
 		heard[pl] = nil
 	end)
+	-- in the grand gate's passage, once it's open: what became of Mabel (her ring in the palace; her, in the drains)
+	if Map.GilesWood then
+		local W = T.Wood or {}
+		local WI, WM = W.Intro or {}, W.More or { "..." }
+		local woodHeard = {}
+		local woodRoot
+		local dying = {}
+		-- Ossaria takes him, for this player: her voice, the rot coming up round him, his last words; then he's gone
+		-- for them (GilesDead: SoulsClient hides him, both of him, and shows his remains)
+		local function ossariaTakes(player)
+			task.wait(3.2)
+			FxRemote:FireClient(player, "Say", W.OssariaName or "Ossaria", W.OssariaLine or "...")
+			local pe = Instance.new("ParticleEmitter")
+			pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
+			pe.Color = ColorSequence.new(Color3.fromRGB(70, 40, 92), Color3.fromRGB(24, 40, 24))
+			pe.LightEmission, pe.Rate, pe.Lifetime = 0, 60, NumberRange.new(0.8, 1.6)
+			pe.Size = NumberSequence.new(1.5, 4)
+			pe.Speed, pe.SpreadAngle = NumberRange.new(1, 3), Vector2.new(180, 180)
+			pe.Transparency = NumberSequence.new(0.3, 1)
+			pe.Parent = woodRoot
+			task.wait(3.5)
+			FxRemote:FireClient(player, "Say", T.Name or "Wretch Giles", W.LastLine or "...")
+			task.wait(2.5)
+			pe.Enabled = false
+			Debris:AddItem(pe, 2)
+			player:SetAttribute("GilesDead", true)
+		end
+		woodRoot = seat(Map.GilesWood, W.CallOut, function()
+			return Map.DecayedGateOpen
+		end, function(player)
+			if dying[player] then
+				return nil -- (in the middle of dying)
+			end
+			if player:GetAttribute("MabelKnows") and player:GetAttribute("MabelQuest") then -- (and not dead yet: seat() stops the dead talking)
+				dying[player] = true
+				player:SetAttribute("GilesReunited", true)
+				task.spawn(function()
+					ossariaTakes(player)
+					dying[player] = nil
+				end)
+				return W.ReunionLine or "..."
+			end
+			local n = (woodHeard[player] or 0) + 1
+			woodHeard[player] = n
+			if n <= #WI then
+				return WI[n]
+			end
+			local k = kingTalk(player)
+			if k then
+				return k
+			end
+			if player:GetAttribute("MabelQuest") and not player:GetAttribute("GilesReunited") then
+				return player:GetAttribute("MabelRing") and W.RingLine or KL[#KL]
+			end
+			return WM[(n - #WI - 1) % #WM + 1]
+		end)
+		Players.PlayerRemoving:Connect(function(pl)
+			woodHeard[pl] = nil
+		end)
+		-- HIS REMAINS, where he sat: slumped, limp, only for those he's died for (SoulsClient shows them; "Search" gives
+		-- his scrap for Mabel, GilesScrap)
+		local body = RigBuilder.build("Taylor", 1)
+		body.Name = "GilesRemains"
+		body:SetAttribute("Giles", "Remains")
+		applyLimbGroup(body)
+		local bh = body:FindFirstChildOfClass("Humanoid")
+		bh.BreakJointsOnDeath = false
+		bh:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+		body:PivotTo(Map.GilesWood + Vector3.new(0, 2.5, 0))
+		body.Parent = workspace
+		makeCorpse(body)
+		ragdoll(body)
+		bh.PlatformStand = true
+		local broot = body:FindFirstChild("HumanoidRootPart")
+		task.delay(5, function() -- (settled: pinned where it fell)
+			for _, d in ipairs(body:GetDescendants()) do
+				if d:IsA("BasePart") then
+					d.Anchored = true
+				end
+			end
+		end)
+		local sp = Instance.new("ProximityPrompt")
+		sp.ActionText, sp.ObjectText, sp.HoldDuration, sp.MaxActivationDistance, sp.RequiresLineOfSight = "Search", "Wretch Giles", 0.6, 8, false
+		sp.Parent = broot
+		sp.Triggered:Connect(function(player)
+			if not player:GetAttribute("GilesDead") or player:GetAttribute("GilesScrap") then
+				return
+			end
+			player:SetAttribute("GilesScrap", true)
+			FxRemote:FireClient(player, "Message", W.RemainsItem or "A scrap of cloth.")
+		end)
+	end
 end
 
 -- put his outfit on a player's character, or take it off again (Config.Armor.Motley;
@@ -250,6 +435,7 @@ end
 
 function M.init(core)
 	Map, FxRemote, now, bodyPose, applyLimbGroup, RigBuilder = core.Map, core.FxRemote, core.now, core.bodyPose, core.applyLimbGroup, core.RigBuilder
+	makeCorpse, ragdoll = core.makeCorpse, core.ragdoll
 end
 
 return M

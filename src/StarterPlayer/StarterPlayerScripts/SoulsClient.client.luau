@@ -220,6 +220,19 @@ for _, ch in ipairs(boss2Frame:GetChildren()) do
 	end
 end
 local boss2Name = boss2Frame:FindFirstChildOfClass("TextLabel")
+-- a boss's posture (BossPosture 0..1, only for one that has it): a thin bar under its health, filling out from the
+-- middle as it's worn down; white when it breaks
+local postureBack = new("Frame", {
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.new(0.5, 0, 1, 5),
+	Size = UDim2.new(0.5, 0, 0, 5),
+	BackgroundColor3 = Color3.fromRGB(12, 10, 10),
+	BackgroundTransparency = 0.3,
+	BorderSizePixel = 0,
+	Visible = false,
+	Parent = bossFrame,
+})
+local postureFill = new("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.fromRGB(230, 150, 50), BorderSizePixel = 0, Parent = postureBack })
 local boss2ChipV = 0
 
 -- full-screen fade overlay
@@ -245,6 +258,7 @@ for i, y in ipairs({ 0, 1 }) do
 		Parent = gui,
 	})
 end
+local stairDone = nil -- (the Great Stair on its way down: this puts it where it ends)
 local cutscene = nil -- { shots = { { fromCF, toCF, seconds }... }, t0, skip = the server's RemoteEvent if skippable, held }
 
 -- a skippable cutscene's "hold SPACE to skip": the bar fills as you hold it (SKIP_HOLD seconds), drains if you let go
@@ -1156,7 +1170,7 @@ local function updateBuffer()
 end
 
 -- Hit reactions: flinch / stagger / big stagger / knockdown
-local function onHurt(dir, level)
+local function onHurt(dir, level, push)
 	local r = Config.HitReactions[level] or Config.HitReactions.Medium
 	local t = os.clock()
 	buffered = nil
@@ -1166,7 +1180,7 @@ local function onHurt(dir, level)
 	local staggered = level == "Stagger"
 	slowUntil, slowSpeed = t + r.Stun, staggered and 0 or 1 -- a stagger roots you to the spot
 	shake = math.max(shake, r.Down and 1 or level == "Large" and 0.7 or staggered and 0.6 or 0.4)
-	pushVelocity(dir, r.Push, r.PushTime or (r.Down and 0.35 or 0.18), 0.7)
+	pushVelocity(dir, push or r.Push, r.PushTime or (r.Down and 0.35 or 0.18), 0.7)
 	if r.Lift and hrp then
 		hrp.AssemblyLinearVelocity += Vector3.new(0, r.Lift, 0) -- (thrown up into the air: Launch)
 	end
@@ -1342,7 +1356,7 @@ local devGrid = new("Frame", {
 	BackgroundTransparency = 1,
 	Parent = devPanel,
 })
-new("UIGridLayout", { CellSize = UDim2.new(0.5, -4, 0, 38), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = devGrid })
+new("UIGridLayout", { CellSize = UDim2.new(0.5, -4, 0, 34), CellPadding = UDim2.fromOffset(8, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = devGrid })
 local function devButton(order, onClick)
 	local b = new("TextButton", {
 		LayoutOrder = order,
@@ -1402,7 +1416,7 @@ devButton(7, function()
 end).Text = "Castellan's health to 1"
 devButton(13, function()
 	Action:FireServer("DevColosseum")
-end).Text = "Teleport: outside the Crowned Colosseum"
+end).Text = "Teleport: outside the Colosseum"
 devButton(14, function()
 	Action:FireServer("DevChampionHP")
 end).Text = "Champion's health to 1"
@@ -1427,6 +1441,275 @@ end).Text = "Teleport: before Pyralis's arena (Maw of Pyralis)"
 devButton(22, function()
 	Action:FireServer("DevBulwark")
 end).Text = "Teleport: Pyralis Bulwark (the lift's top)"
+devButton(23, function()
+	Action:FireServer("DevCensery")
+end).Text = "Teleport: the Censery (its gatehouse door)"
+devButton(24, function()
+	Action:FireServer("DevPalace")
+end).Text = "Teleport: Palace of Pyralis (inside its gate)"
+devButton(25, function()
+	Action:FireServer("DevSunkenCourt")
+end).Text = "Teleport: the Sunken Court (the king's arena)"
+devButton(26, function()
+	Action:FireServer("DevDecayed")
+end).Text = "Teleport: past the grand gate (the Decayed Palace's wood)"
+local devGod = false
+local godButton
+godButton = devButton(31, function()
+	devGod = not devGod
+	Action:FireServer("DevGod", devGod)
+	godButton.Text = devGod and "Infinite i-frames: ON" or "Infinite i-frames: OFF"
+end)
+godButton.Text = "Infinite i-frames: OFF"
+devButton(30, function()
+	Action:FireServer("DevOssaria")
+end).Text = "Teleport: Ossaria's court (under the Decayed throne hall)"
+-- OSSARIA'S OWN MENU: every cutscene of hers and every phase of her fight, from anywhere (the server's "DevOss":
+-- Ossaria.luau's M.dev). Opened off the dev menu, on the other side of the screen; shut with it.
+do -- (in a block of its own: this script's main body is near Luau's limit of 200 locals)
+local ossPanel = new("Frame", {
+	Name = "OssariaMenu",
+	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(0, 36, 0.5, 0),
+	Size = UDim2.fromOffset(420, 0),
+	AutomaticSize = Enum.AutomaticSize.Y,
+	BackgroundColor3 = Color3.fromRGB(14, 11, 18),
+	BackgroundTransparency = 0.1,
+	BorderSizePixel = 0,
+	Visible = false,
+	Parent = gui,
+})
+new("UICorner", { CornerRadius = UDim.new(0, 6), Parent = ossPanel })
+new("UIStroke", { Color = Color3.fromRGB(120, 90, 160), Thickness = 1, Parent = ossPanel })
+new("UIPadding", { PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = ossPanel })
+new("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = ossPanel })
+do
+	local order = 0
+	local function head(text, size, color)
+		order += 1
+		new("TextLabel", {
+			LayoutOrder = order,
+			Size = UDim2.new(1, 0, 0, size + 6),
+			BackgroundTransparency = 1,
+			Font = FONT,
+			TextSize = size,
+			TextColor3 = color,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = text,
+			Parent = ossPanel,
+		})
+	end
+	local function option(text, what)
+		order += 1
+		local b = new("TextButton", {
+			LayoutOrder = order,
+			Size = UDim2.new(1, 0, 0, 30),
+			BackgroundColor3 = Color3.fromRGB(38, 30, 46),
+			BorderSizePixel = 0,
+			AutoButtonColor = true,
+			Font = Enum.Font.SourceSansSemibold,
+			TextSize = 15,
+			TextColor3 = Color3.fromRGB(230, 220, 240),
+			Text = text,
+			Parent = ossPanel,
+		})
+		new("UICorner", { CornerRadius = UDim.new(0, 4), Parent = b })
+		b.Activated:Connect(function()
+			Action:FireServer("DevOss", what)
+			if what ~= "wound" and what ~= "flags" then -- (those two: the menus stay up)
+				devPanel.Visible = false
+			end
+		end)
+	end
+	local DIM = Color3.fromRGB(170, 150, 200)
+	head("Ossaria  (her cutscenes and phases)", 20, Color3.fromRGB(226, 208, 246))
+	head("CUTSCENES", 14, DIM)
+	option("The fall into her court", "fall")
+	option("The meeting: her flight, the Heights pulled down", "meet")
+	option("The challenge: the husk raised  (then phase 1)", "challenge")
+	option("Phase 2's: she sheds her shrouds  (then phase 2)", "reveal")
+	option("Phase 3's: the great hands  (then phase 3)", "rise")
+	option("Her death, now  (needs a phase running)", "death")
+	head("PHASES, straight into them", 14, DIM)
+	option("Phase 1: the husk on her strings", "p1")
+	option("Phase 2: Ossaria, Exiled Heir", "p2")
+	option("Phase 3: Ossaria, Hand of Decay", "p3")
+	head("AND", 14, DIM)
+	option("One hit from the next bar  (or from death)", "wound")
+	option("Reset her: shrouded on the sand, to be challenged", "arena")
+	option("Forget her cutscenes: they play as the first time", "flags")
+	-- THE ATTACK LAB: a panel of its own beside this one. She's put on the sand in phase 2 or 3 and only waits; every
+	-- move she has (the server's list: ReplicatedStorage "OssLab", name|phase|pool or lab|a line on it) is a row -
+	-- its name fires it once, "loop" over and over, and K / T / C mark it keep, tweak or cut (kept on you as an
+	-- attribute "Lab_<move>", and printed in the server's output). * = a candidate, not in her fight yet.
+	local labPanel = new("Frame", {
+		Name = "OssariaLab",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 36 + 420 + 10, 0.5, 0),
+		Size = UDim2.fromOffset(430, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = Color3.fromRGB(14, 11, 18),
+		BackgroundTransparency = 0.1,
+		BorderSizePixel = 0,
+		Visible = false,
+		Parent = gui,
+	})
+	new("UICorner", { CornerRadius = UDim.new(0, 6), Parent = labPanel })
+	new("UIStroke", { Color = Color3.fromRGB(120, 90, 160), Thickness = 1, Parent = labPanel })
+	new("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = labPanel })
+	new("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = labPanel })
+	local function labButton(parent, text, size, pos, onClick)
+		local b = new("TextButton", {
+			Size = size,
+			Position = pos or UDim2.new(),
+			BackgroundColor3 = Color3.fromRGB(38, 30, 46),
+			BorderSizePixel = 0,
+			AutoButtonColor = true,
+			Font = Enum.Font.SourceSansSemibold,
+			TextSize = 14,
+			TextColor3 = Color3.fromRGB(230, 220, 240),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Text = text,
+			Parent = parent,
+		})
+		new("UICorner", { CornerRadius = UDim.new(0, 4), Parent = b })
+		b.Activated:Connect(function()
+			onClick(b)
+		end)
+		return b
+	end
+	new("TextLabel", { LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, Font = FONT, TextSize = 18, TextColor3 = Color3.fromRGB(226, 208, 246), TextXAlignment = Enum.TextXAlignment.Left, Text = "Attack lab   ( * = candidate )", Parent = labPanel })
+	local top = new("Frame", { LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 58), BackgroundTransparency = 1, Parent = labPanel })
+	labButton(top, "Start: phase 2", UDim2.new(0.5, -3, 0, 26), UDim2.new(0, 0, 0, 0), function()
+		Action:FireServer("DevOss", "lab2")
+	end)
+	labButton(top, "Start: phase 3", UDim2.new(0.5, -3, 0, 26), UDim2.new(0.5, 3, 0, 0), function()
+		Action:FireServer("DevOss", "lab3")
+	end)
+	labButton(top, "Stop (she waits)", UDim2.new(1 / 3, -4, 0, 26), UDim2.new(0, 0, 0, 32), function()
+		Action:FireServer("DevOss", "passive:on")
+	end)
+	labButton(top, "She fights freely", UDim2.new(1 / 3, -4, 0, 26), UDim2.new(1 / 3, 2, 0, 32), function()
+		Action:FireServer("DevOss", "passive:off")
+	end)
+	local hurt = false
+	labButton(top, "I can be hurt: OFF", UDim2.new(1 / 3, -4, 0, 26), UDim2.new(2 / 3, 4, 0, 32), function(b)
+		hurt = not hurt
+		Action:FireServer("DevGod", not hurt)
+		b.Text = hurt and "I can be hurt: ON" or "I can be hurt: OFF"
+	end)
+	local rows = new("ScrollingFrame", {
+		LayoutOrder = 3,
+		Size = UDim2.new(1, 0, 0, 470),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Parent = labPanel,
+	})
+	new("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = rows })
+	local MARKS = { { "K", "keep", Color3.fromRGB(60, 120, 70) }, { "T", "tweak", Color3.fromRGB(140, 120, 50) }, { "C", "cut", Color3.fromRGB(140, 50, 50) } }
+	local function fill()
+		for _, c in ipairs(rows:GetChildren()) do
+			if c:IsA("Frame") then
+				c:Destroy()
+			end
+		end
+		local n = 0
+		for entry in string.gmatch(ReplicatedStorage:GetAttribute("OssLab") or "", "[^;]+") do
+			local name, phase, kind, note = entry:match("^(.-)|(%d)|(%a+)|(.*)$")
+			if name then
+				n += 1
+				local row = new("Frame", { LayoutOrder = (kind == "lab" and 0 or 100) + n, Size = UDim2.new(1, -8, 0, note ~= "" and 42 or 26), BackgroundTransparency = 1, Parent = rows })
+				labButton(row, (kind == "lab" and "* " or "") .. name .. "   (phase " .. phase .. (phase == "3" and " only)" or "+)"), UDim2.new(0.5, 0, 0, 26), nil, function()
+					Action:FireServer("DevOss", "fire:" .. name)
+				end)
+				labButton(row, "loop", UDim2.new(0.14, 0, 0, 26), UDim2.new(0.5, 4, 0, 0), function()
+					Action:FireServer("DevOss", "loop:" .. name)
+				end)
+				local marks = {}
+				for i, m in ipairs(MARKS) do
+					marks[i] = labButton(row, m[1], UDim2.new(0.1, 0, 0, 26), UDim2.new(0.66 + (i - 1) * 0.115, 0, 0, 0), function()
+						Action:FireServer("DevOss", "mark:" .. name .. ":" .. m[2])
+						for j, other in ipairs(marks) do
+							other.BackgroundColor3 = j == i and m[3] or Color3.fromRGB(38, 30, 46)
+						end
+					end)
+					if player:GetAttribute("Lab_" .. name) == m[2] then
+						marks[i].BackgroundColor3 = m[3]
+					end
+				end
+				if note ~= "" then
+					new("TextLabel", { Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 2, 0, 27), BackgroundTransparency = 1, Font = Enum.Font.SourceSans, TextSize = 13, TextColor3 = Color3.fromRGB(170, 150, 200), TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = note, Parent = row })
+				end
+			end
+		end
+	end
+	fill()
+	ReplicatedStorage:GetAttributeChangedSignal("OssLab"):Connect(fill)
+	order += 1
+	local open = new("TextButton", {
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, 30),
+		BackgroundColor3 = Color3.fromRGB(70, 46, 96),
+		BorderSizePixel = 0,
+		AutoButtonColor = true,
+		Font = Enum.Font.SourceSansSemibold,
+		TextSize = 15,
+		TextColor3 = Color3.fromRGB(240, 230, 250),
+		Text = "ATTACK LAB  >>  (try her moves one at a time)",
+		Parent = ossPanel,
+	})
+	new("UICorner", { CornerRadius = UDim.new(0, 4), Parent = open })
+	open.Activated:Connect(function()
+		labPanel.Visible = not labPanel.Visible
+	end)
+	ossPanel:GetPropertyChangedSignal("Visible"):Connect(function()
+		if not ossPanel.Visible then
+			labPanel.Visible = false
+		end
+	end)
+end
+devPanel:GetPropertyChangedSignal("Visible"):Connect(function()
+	if not devPanel.Visible then
+		ossPanel.Visible = false
+	end
+end)
+devButton(41, function()
+	ossPanel.Visible = not ossPanel.Visible
+end).Text = "Ossaria's menu  (her cutscenes and phases)"
+end
+devButton(27, function()
+	Action:FireServer("DevKingEnd")
+end).Text = "End the King of Pyralis's fight (straight to his talk)"
+devButton(28, function()
+	Action:FireServer("DevHeights")
+end).Text = "Teleport: the Gilded Heights (over the Colosseum)"
+devButton(29, function()
+	Action:FireServer("DevStairKeys")
+end).Text = "Kill the Silver Knight, get all 3 keys (then walk onto his sand)"
+devButton(39, function()
+	Action:FireServer("DevBallroom")
+end).Text = "Teleport: the Gilded Ballroom (the old king)"
+devButton(40, function()
+	Action:FireServer("DevGildedNext")
+end).Text = "Next Gilded enemy (look each one over in turn)"
+local devResetArmed = false
+local devReset
+devReset = devButton(41, function() -- (as the equipment menu's: a second click within 4 s to mean it)
+	if devResetArmed then
+		Action:FireServer("ResetGame")
+		return
+	end
+	devResetArmed = true
+	devReset.Text = "Click again to wipe the save"
+	task.delay(4, function()
+		devResetArmed = false
+		devReset.Text = "Reset game (wipe the save)"
+	end)
+end)
+devReset.Text = "Reset game (wipe the save)"
 -- your position on screen, top centre: where your feet are (the root less 3), to whole studs - for pointing out spots
 local coordsLabel = new("TextLabel", {
 	Name = "DevCoords",
@@ -1494,6 +1777,25 @@ do
 		return new("TextLabel", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundTransparency = 1, Font = FONT, TextSize = size, TextColor3 = color, TextXAlignment = align or Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = text, Parent = parent })
 	end
 	label(equipPanel, 24, 14, 300, 30, 28, Color3.fromRGB(226, 200, 150), "Equipment")
+	-- a new game: every bit of progress wiped (the server's Save.reset). A second click within 4 s to mean it
+	do
+		local reset = new("TextButton", { Position = UDim2.fromOffset(500, 16), Size = UDim2.fromOffset(156, 28), BackgroundColor3 = Color3.fromRGB(34, 18, 16), BorderSizePixel = 0, AutoButtonColor = true, Font = FONT, TextSize = 16, TextColor3 = Color3.fromRGB(200, 150, 130), Text = "New game", Parent = equipPanel })
+		new("UIStroke", { Color = Color3.fromRGB(110, 60, 50), Thickness = 1, Parent = reset })
+		local armed = false
+		reset.Activated:Connect(function()
+			if armed then
+				reset.Text = "Wiping..."
+				Action:FireServer("ResetGame")
+				return
+			end
+			armed = true
+			reset.Text = "Erase all progress?"
+			task.delay(4, function()
+				armed = false
+				reset.Text = "New game"
+			end)
+		end)
+	end
 	label(equipPanel, 0, 414, 680, 20, 14, Color3.fromRGB(140, 128, 108), "Select a slot · click a piece to equip it · T or Esc to close", Enum.TextXAlignment.Center)
 	new("Frame", { Position = UDim2.fromOffset(290, 56), Size = UDim2.fromOffset(1, 340), BackgroundColor3 = LINE, BorderSizePixel = 0, Parent = equipPanel })
 	local slotBox = new("Frame", { Position = UDim2.fromOffset(24, 56), Size = UDim2.fromOffset(250, 340), BackgroundTransparency = 1, Parent = equipPanel })
@@ -1798,6 +2100,15 @@ local function actionFor(input)
 	return MOUSE_ACTIONS[input.UserInputType]
 end
 
+-- the dev menu (K) is only a dev's (the server's "Dev" attribute); anyone else can type its code first (see InputBegan)
+local DIGIT_KEYS = { Zero = "0", One = "1", Two = "2", Three = "3", Four = "4", Five = "5", Six = "6", Seven = "7", Eight = "8", Nine = "9" }
+local recentKeys, unlockAskedAt = "", -math.huge
+player:GetAttributeChangedSignal("Dev"):Connect(function()
+	if player:GetAttribute("Dev") and os.clock() - unlockAskedAt < 5 then -- (just let in by the code: open)
+		devPanel.Visible = true
+	end
+end)
+
 UserInputService.InputBegan:Connect(function(input)
 	-- while reading a page, clicks/space/esc just close it (no accidental swings)
 	if notePanel.Visible then
@@ -1817,6 +2128,12 @@ UserInputService.InputBegan:Connect(function(input)
 	end
 	if UserInputService:GetFocusedTextBox() then
 		return -- typing in chat
+	end
+	-- the last few letters and digits typed: sent with K by anyone who isn't a dev, for the server to check its code
+	local keyName = input.KeyCode.Name
+	local typed = #keyName == 1 and keyName:lower() or DIGIT_KEYS[keyName]
+	if typed then
+		recentKeys = (recentKeys .. typed):sub(-12)
 	end
 	-- the weapon and level-up menus take the mouse too
 	if equipPanel.Visible or levelPanel.Visible then
@@ -1850,11 +2167,16 @@ UserInputService.InputBegan:Connect(function(input)
 		cursorFree = not cursorFree
 	elseif action == "Help" then
 		helpLabel.Visible = not helpLabel.Visible
-	elseif action == "DevSpeed" then
+	elseif action == "DevSpeed" and player:GetAttribute("Dev") then
 		toggleDevFast()
 		devRefresh()
 	elseif action == "DevMenu" then
-		devPanel.Visible = not devPanel.Visible
+		if player:GetAttribute("Dev") then
+			devPanel.Visible = not devPanel.Visible
+		else
+			unlockAskedAt = os.clock()
+			Action:FireServer("DevUnlock", recentKeys) -- (the right code: the server makes you a dev, and the menu opens)
+		end
 	elseif action == "Weapons" then
 		equipPanel.Visible = not equipPanel.Visible
 	end
@@ -1924,6 +2246,10 @@ local function updateCamera(dt)
 					camera.CFrame = s[1]:Lerp(s[2], e)
 				else
 					camera.CFrame = CFrame.new(s[1]:Lerp(s[2], e))
+				end
+				if shake > 0 then -- (a jolt in the shot: "Shake")
+					camera.CFrame *= CFrame.Angles((math.random() - 0.5) * shake * 0.06, (math.random() - 0.5) * shake * 0.06, (math.random() - 0.5) * shake * 0.03)
+					shake = math.max(0, shake - dt * 2.5)
 				end
 				return
 			end
@@ -2131,6 +2457,12 @@ local function updateHud(dt)
 		bossFill.Size = UDim2.fromScale(b, 1)
 		bossChipV = b >= bossChipV and b or math.max(b, bossChipV - dt * 0.25)
 		bossChip.Size = UDim2.fromScale(bossChipV, 1)
+		local pv = ReplicatedStorage:GetAttribute("BossPosture")
+		postureBack.Visible = pv ~= nil
+		if pv then
+			postureFill.Size = UDim2.fromScale(math.clamp(pv, 0, 1), 1)
+			postureFill.BackgroundColor3 = pv >= 0.999 and Color3.fromRGB(255, 245, 225) or Color3.fromRGB(230, 150, 50)
+		end
 	else
 		bossChipV = 0 -- (so a bar coming back snaps to the boss's health, not drains down to it from full)
 	end
@@ -2264,26 +2596,184 @@ do
 		end
 		tween(buried, 2, on and { TintColor = Color3.fromRGB(255, 190, 180), Brightness = -0.05, Contrast = 0.12, Saturation = -0.15 } or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
 	end)
+	-- the Rotted Court, Ossaria's (the server sets RottedAir): the sun and the sky shut right out of it, at once, not
+	-- eased in - so the court can never be seen lit like open ground in the moment before Roblox has worked out
+	-- that it's roofed over. (What it was is put back as you leave; taken afresh each time, as night may have fallen.)
+	local rottedBefore = nil
+	player:GetAttributeChangedSignal("RottedAir"):Connect(function()
+		if player:GetAttribute("RottedAir") == true then
+			rottedBefore = { Brightness = Lighting.Brightness, OutdoorAmbient = Lighting.OutdoorAmbient, EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale, EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale }
+			Lighting.Brightness, Lighting.OutdoorAmbient, Lighting.EnvironmentDiffuseScale, Lighting.EnvironmentSpecularScale = 0, Lighting.Ambient, 0, 0
+		elseif rottedBefore then
+			tween(Lighting, 0.4, rottedBefore)
+			rottedBefore = nil
+		end
+	end)
 	-- Pyralis Bulwark (the server sets Smoulder): only a touch dimmer than the open sky, warm (its walks are lit)
 	local smoulder = Instance.new("ColorCorrectionEffect")
 	smoulder.Name = "SmoulderTint"
 	smoulder.Parent = Lighting
+	-- ...and the Sunken Court under it (the server sets CourtDark): far darker, the fire the only real light in it
 	local exposure0
-	player:GetAttributeChangedSignal("Smoulder"):Connect(function()
-		local on = player:GetAttribute("Smoulder") == true
+	local function smoulderAir()
+		local on, dark = player:GetAttribute("Smoulder") == true, player:GetAttribute("CourtDark") == true
 		exposure0 = exposure0 or Lighting.ExposureCompensation
-		tween(Lighting, 2.5, { ExposureCompensation = on and exposure0 - 0.1 or exposure0 })
-		tween(smoulder, 2.5, on and { TintColor = Color3.fromRGB(255, 205, 190), Brightness = -0.04, Contrast = 0.08, Saturation = -0.08 } or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
+		tween(Lighting, 2.5, { ExposureCompensation = exposure0 - (dark and 0.65 or on and 0.1 or 0) })
+		tween(smoulder, 2.5, dark and { TintColor = Color3.fromRGB(255, 180, 160), Brightness = -0.085, Contrast = 0.18, Saturation = -0.1 }
+			or on and { TintColor = Color3.fromRGB(255, 205, 190), Brightness = -0.04, Contrast = 0.08, Saturation = -0.08 }
+			or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
+	end
+	player:GetAttributeChangedSignal("Smoulder"):Connect(smoulderAir)
+	player:GetAttributeChangedSignal("CourtDark"):Connect(smoulderAir)
+	-- the Gilded Heights (the server sets Gleam): the one clear noon in all this land, the colour back in everything
+	local gleamTint = Instance.new("ColorCorrectionEffect")
+	gleamTint.Name = "GleamTint"
+	gleamTint.Parent = Lighting
+	local grey = nil -- the land's own light, captured the first time
+	player:GetAttributeChangedSignal("Gleam"):Connect(function()
+		local on = player:GetAttribute("Gleam") == true
+		local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+		grey = grey or { ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness, Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient, EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale, EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale, atm = atm and { Density = atm.Density, Haze = atm.Haze, Color = atm.Color, Decay = atm.Decay, Glare = atm.Glare } }
+		tween(Lighting, 2.5, on and { ClockTime = 11, Brightness = 2.1, Ambient = Color3.fromRGB(112, 108, 100), OutdoorAmbient = Color3.fromRGB(146, 146, 150), EnvironmentDiffuseScale = 0.7, EnvironmentSpecularScale = 0.55 }
+			or { ClockTime = grey.ClockTime, Brightness = grey.Brightness, Ambient = grey.Ambient, OutdoorAmbient = grey.OutdoorAmbient, EnvironmentDiffuseScale = grey.EnvironmentDiffuseScale, EnvironmentSpecularScale = grey.EnvironmentSpecularScale })
+		if atm and grey.atm then
+			tween(atm, 2.5, on and { Density = 0.22, Haze = 0.5, Color = Color3.fromRGB(180, 200, 222), Decay = Color3.fromRGB(116, 146, 196), Glare = 0.12 } or grey.atm)
+		end
+		tween(gleamTint, 2.5, on and { TintColor = Color3.fromRGB(246, 250, 255), Brightness = 0, Contrast = 0.06, Saturation = 0.18 } or { TintColor = Color3.new(1, 1, 1), Brightness = 0, Contrast = 0, Saturation = 0 })
+	end)
+end
+
+---------------------------------------------------------------------------
+-- THE FALL OF THE GILDED HEIGHTS (the server's HeightsRuin, slow): its halls broken into chunks - by ring out from
+-- the hole, by bearing, towers apart from what's under them - each shuddering, then sagging in towards the hole,
+-- toppling and dropping away, in a burst of dust, on the server's timing (o.Bands, the Ballroom at o.BallAt). Only
+-- moved here, on this client: the server takes the halls away when it's done (o.Dur).
+---------------------------------------------------------------------------
+local function heightsFall(roots, o)
+	local C, UP = o.Centre, Vector3.new(0, 1, 0)
+	local rnd = Random.new(4242)
+	local chunks, byKey = {}, {}
+	local function bandOf(r)
+		for i, bd in ipairs(o.Bands) do
+			if r < bd[1] then
+				return i, bd[2]
+			end
+		end
+		return #o.Bands, o.Bands[#o.Bands][2]
+	end
+	for _, root in ipairs(roots) do
+		for _, p in ipairs(root:GetDescendants()) do
+			if p:IsA("BasePart") then
+				local pos = p.Position
+				local off = Vector3.new(pos.X - C.X, 0, pos.Z - C.Z)
+				local key, band, at
+				if o.Ballroom and (Vector3.new(pos.X - o.Ballroom.X, 0, pos.Z - o.Ballroom.Z)).Magnitude < o.BallR then
+					key, band, at = "ball", #o.Bands, o.BallAt
+				else
+					band, at = bandOf(off.Magnitude)
+					local sector = math.floor((math.atan2(off.Z, off.X) + math.pi) / (2 * math.pi) * 18)
+					local high = pos.Y - o.Top > 30 and 1 or 0 -- (towers and spires: they go on their own)
+					key = band * 1000 + sector * 10 + high
+					at += rnd:NextNumber(0, 1.6) - high * 0.3
+				end
+				local ch = byKey[key]
+				if not ch then
+					ch = { parts = {}, sum = Vector3.zero, lowY = math.huge, at = at, band = band }
+					byKey[key] = ch
+					table.insert(chunks, ch)
+				end
+				table.insert(ch.parts, p)
+				ch.sum += pos
+				ch.lowY = math.min(ch.lowY, pos.Y)
+			end
+		end
+	end
+	for _, ch in ipairs(chunks) do
+		local mid = ch.sum / #ch.parts
+		ch.pivot = CFrame.new(mid.X, ch.lowY, mid.Z) -- (it tips over from its foot)
+		ch.rel = {}
+		for i, p in ipairs(ch.parts) do
+			ch.rel[i] = ch.pivot:ToObjectSpace(p.CFrame)
+		end
+		local out = Vector3.new(mid.X - C.X, 0, mid.Z - C.Z)
+		out = out.Magnitude > 1 and out.Unit or Vector3.new(1, 0, 0)
+		ch.inward = -out
+		ch.axis = out:Cross(UP).Unit * (rnd:NextNumber() < 0.8 and 1 or -1) -- (most topple in, towards the hole)
+		ch.tilt = rnd:NextNumber(0.15, 0.5)
+		ch.slide = ch.band < #o.Bands and rnd:NextNumber(4, 12) or rnd:NextNumber(0, 4)
+		ch.g = rnd:NextNumber(26, 44) -- (slow, for the camera: the land's own gravity would have it gone in a blink)
+	end
+	local t0 = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		if t > o.Dur + 1 then
+			conn:Disconnect()
+			return
+		end
+		local parts, cfs = {}, {}
+		for _, ch in ipairs(chunks) do
+			local tau = t - ch.at
+			if tau > -0.8 and not ch.done then
+				local cf
+				if tau < 0 then -- shuddering
+					cf = ch.pivot + Vector3.new(rnd:NextNumber(-1, 1), rnd:NextNumber(-0.5, 0.5), rnd:NextNumber(-1, 1)) * 0.3
+				else
+					if not ch.dusted then
+						ch.dusted = true
+						if #ch.parts > 20 then
+							local d = Instance.new("Part")
+							d.Anchored, d.CanCollide, d.CanQuery, d.CanTouch, d.Transparency = true, false, false, false, 1
+							d.Size, d.CFrame = Vector3.new(30, 4, 30), ch.pivot
+							local pe = Instance.new("ParticleEmitter")
+							pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
+							pe.Rate, pe.Lifetime, pe.Speed = 0, NumberRange.new(3, 6), NumberRange.new(4, 12)
+							pe.SpreadAngle = Vector2.new(60, 60)
+							pe.Size = NumberSequence.new(8, 22)
+							pe.Transparency = NumberSequence.new(0.3, 1)
+							pe.Color = ColorSequence.new(Color3.fromRGB(196, 190, 176))
+							pe.Parent = d
+							d.Parent = workspace
+							pe:Emit(30)
+							Debris:AddItem(d, 7)
+						end
+					end
+					local drop = 0.5 * ch.g * tau * tau
+					local theta = math.min(ch.tilt * tau * tau, 1.7)
+					cf = CFrame.new(ch.pivot.Position + ch.inward * ch.slide * tau - UP * drop) * CFrame.fromAxisAngle(ch.axis, theta)
+					ch.done = drop > 600 -- (long gone under the rock's old top: left there)
+				end
+				for i, p in ipairs(ch.parts) do
+					table.insert(parts, p)
+					table.insert(cfs, cf * ch.rel[i])
+				end
+			end
+		end
+		if #parts > 0 then
+			pcall(function() -- (the server may take them away mid-frame)
+				workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+			end)
+		end
 	end)
 end
 
 ---------------------------------------------------------------------------
 -- server effects
 ---------------------------------------------------------------------------
+local HUSHED ={ Message = true, Banner = true, Shake = true, Say = true }
+local hushUntil = 0
 Fx.OnClientEvent:Connect(function(kind, a, b, c)
+	if kind == "Hush" then -- (the server putting your save's world back: a's seconds of what that says go unshown)
+		hushUntil = os.clock() + a
+		return
+	elseif HUSHED[kind] and os.clock() < hushUntil then
+		return
+	end
 	if kind == "Hurt" then
 		spinUntil = 0 -- (a hit breaks the spin)
-		onHurt(a, b)
+		onHurt(a, b, c)
+	elseif kind == "Shove" then
+		pushVelocity(a, b, 0.3, 0.7) -- (carried along by something moving into you: no hurt, no stun)
 	elseif kind == "Flash" then
 		-- the screen washed with colour a (a blinding blast; black, a dip between shots), held c seconds, fading over b
 		flashFrame.BackgroundColor3 = a
@@ -2310,6 +2800,120 @@ Fx.OnClientEvent:Connect(function(kind, a, b, c)
 		freezeUntil = math.max(freezeUntil, t + a)
 		if hrp then
 			hrp.AssemblyLinearVelocity = Vector3.zero
+		end
+	elseif kind == "Ride" then
+		-- a lift on its way (init.server): its parts, and whoever rides it, carried from a.From to a.Dest over a.Dur,
+		-- placed here every frame before the camera follows (the server sets where it ends)
+		local t0 = os.clock()
+		local name = "Ride" .. tostring(t0)
+		RunService:BindToRenderStep(name, Enum.RenderPriority.Camera.Value - 1, function()
+			local k = math.clamp((os.clock() - t0) / a.Dur, 0, 1)
+			local cf = a.From:Lerp(a.Dest, k * k * (3 - 2 * k))
+			for _, e in ipairs(a.Parts) do
+				if e[1] and e[1].Parent then -- (nil: not streamed in here)
+					e[1].CFrame = cf * e[2]
+				end
+			end
+			if k >= 1 then
+				RunService:UnbindFromRenderStep(name)
+			end
+		end)
+	elseif kind == "StairDescend" then
+		-- the Great Stair (init.server, Map.Heights.Stair) comes down out of a disc of light at the lip of the hole, screwing
+		-- along its own helix: every frame here, nothing on the server moves. It's hidden above the disc, and fades in as it
+		-- comes through. Three keys' lights go up first and open it. The server shows it for real, and says so ("StairDone").
+		local parts, finals = {}, {}
+		for _, p in ipairs(a.Steps:GetDescendants()) do
+			if p:IsA("BasePart") then
+				table.insert(parts, p)
+				table.insert(finals, p.CFrame)
+			end
+		end
+		local deck = {}
+		for _, p in ipairs(a.Deck:GetDescendants()) do
+			if p:IsA("BasePart") then
+				table.insert(deck, p)
+			end
+		end
+		local C, planeY = a.Centre, a.Plane
+		local fx = Instance.new("Folder")
+		fx.Name = "StairFx"
+		fx.Parent = workspace
+		local function glowPart(size, cf, col)
+			local p = Instance.new("Part")
+			p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
+			p.Material, p.Color, p.Size, p.CFrame, p.Transparency = Enum.Material.Neon, col, size, cf, 1
+			p.Parent = fx
+			return p
+		end
+		local GOLDEN = Color3.fromRGB(255, 226, 150)
+		local UPRIGHT = CFrame.Angles(0, 0, math.pi / 2)
+		local disc = glowPart(Vector3.new(0.4, 80, 80), CFrame.new(C.X, planeY, C.Z) * UPRIGHT, GOLDEN)
+		local discLight = Instance.new("PointLight")
+		discLight.Color, discLight.Range, discLight.Brightness = GOLDEN, 60, 4
+		discLight.Parent = disc
+		local shaft = glowPart(Vector3.new(200, 76, 76), CFrame.new(C.X, planeY + 100, C.Z) * UPRIGHT, GOLDEN)
+		local orbs = {}
+		for i, col in ipairs({ Color3.fromRGB(225, 235, 245), Color3.fromRGB(255, 110, 40), Color3.fromRGB(140, 200, 80) }) do -- silver, flame, foul
+			local o = glowPart(Vector3.one * 1.6, CFrame.new(C), col)
+			o.Shape = Enum.PartType.Ball
+			o.Transparency = 0
+			local l = Instance.new("PointLight")
+			l.Color, l.Range, l.Brightness = col, 18, 3
+			l.Parent = o
+			orbs[i] = o
+		end
+		local t0 = os.clock()
+		local name = "GreatStair"
+		local cfs = table.create(#parts)
+		local seen = table.create(#parts, 1)
+		local TURN = math.rad(360 * a.Turns)
+		local function finish()
+			stairDone = nil
+			RunService:UnbindFromRenderStep(name)
+			workspace:BulkMoveTo(parts, finals, Enum.BulkMoveMode.FireCFrameChanged)
+			fx:Destroy()
+		end
+		stairDone = finish
+		RunService:BindToRenderStep(name, Enum.RenderPriority.Camera.Value - 1, function()
+			local t = os.clock() - t0
+			-- the keys' lights: round and up from the sand, gone into the disc as it opens
+			for i, o in ipairs(orbs) do
+				local up = math.clamp((t - 1.2) / (a.Delay - 1.7), 0, 1)
+				local r = 8 * (1 - up * 0.6)
+				local ang = t * 2.2 + i * math.pi * 2 / 3
+				o.CFrame = CFrame.new(C + Vector3.new(math.cos(ang) * r, 3 + up * up * (planeY - C.Y - 3), math.sin(ang) * r))
+				o.Transparency = up >= 1 and 1 or 0
+			end
+			local open = math.clamp((t - (a.Delay - 1)) / 1.5, 0, 1)
+			local close = math.clamp((t - (a.Delay + a.Dur - 1)) / 3, 0, 1)
+			disc.Transparency = 1 - 0.65 * open * (1 - close)
+			shaft.Transparency = 1 - 0.14 * open * (1 - close)
+			local k = math.clamp((t - a.Delay) / a.Dur, 0, 1)
+			local s = (1 - k) ^ 1.5
+			local T = CFrame.new(C + Vector3.new(0, a.Height * s, 0)) * CFrame.Angles(0, -TURN * s, 0) * CFrame.new(-C)
+			for i, f in ipairs(finals) do
+				local cf = T * f
+				cfs[i] = cf
+				local v = 1 - math.clamp((planeY - cf.Y) / 3, 0, 1)
+				if v ~= seen[i] then
+					seen[i] = v
+					parts[i].Transparency = v
+				end
+			end
+			workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+			-- the deck and its bridge, last of all, in place
+			local d = 1 - math.clamp((t - (a.Delay + a.Dur - 3)) / 3, 0, 1)
+			for _, p in ipairs(deck) do
+				p.Transparency = d
+			end
+		end)
+	elseif kind == "StairDone" then
+		if stairDone then
+			stairDone()
+		end
+		if cutscene then
+			cutscene.t0 = -math.huge -- (someone skipped: past its last shot)
 		end
 	elseif kind == "HitConfirm" then
 		-- hit-stop: freeze for an instant when your blade bites
@@ -2387,6 +2991,14 @@ Fx.OnClientEvent:Connect(function(kind, a, b, c)
 		end)
 		lockTarget = nil
 		focus = nil
+	elseif kind == "HeightsFall" then
+		local roots = {}
+		for _, r in pairs(a) do -- (a may have a hole in it: no dancers)
+			if typeof(r) == "Instance" then
+				table.insert(roots, r)
+			end
+		end
+		heightsFall(roots, b)
 	elseif kind == "Carrier" then
 		-- what answers the bell: drawn here, on every client, along the server's plan
 		require(ReplicatedStorage:WaitForChild("Carrier")).play(a)
@@ -2488,4 +3100,65 @@ task.spawn(function()
 end)
 if player.Character then
 	task.spawn(onCharacter, player.Character)
+end
+-- Wretch Giles, once Ossaria has had him (attribute GilesDead, Characters/Taylor): him hidden, both of him, his remains
+-- shown; before that, the other way round. Local only - everyone else sees their own Giles
+task.spawn(function()
+	while true do -- (each second: they may stream in late)
+		task.wait(1)
+		local dead = player:GetAttribute("GilesDead") == true
+		local npcs = workspace:FindFirstChild("NPCs")
+		local list = npcs and npcs:GetChildren() or {}
+		local remains = workspace:FindFirstChild("GilesRemains")
+		if remains then
+			table.insert(list, remains)
+		end
+		for _, m in ipairs(list) do
+			local g = m:GetAttribute("Giles")
+			if g then
+				local show = (g == "Remains") == dead
+				for _, d in ipairs(m:GetDescendants()) do
+					if d:IsA("BasePart") then
+						d.LocalTransparencyModifier = show and 0 or 1
+					elseif d:IsA("ProximityPrompt") or d:IsA("Light") then
+						d.Enabled = show
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- the drain grate: lifted on this player's screen alone once they've opened it (GrateUp, init.server).
+-- (re-applied whenever it streams back in: streaming hands back the server's shut grate)
+do
+	local function lift(g)
+		if not player:GetAttribute("GrateUp") or g:GetAttribute("Lifted") or not g.PrimaryPart then
+			return
+		end
+		g:SetAttribute("Lifted", true)
+		for _, d in ipairs(g:GetDescendants()) do
+			if d:IsA("BasePart") then
+				d.CanCollide = false
+			elseif d:IsA("ProximityPrompt") then
+				d.Enabled = false
+			end
+		end
+		local from = g:GetPivot()
+		task.spawn(function()
+			for i = 1, 45 do
+				g:PivotTo(from + Vector3.new(0, 9.5 * math.sin(i / 45 * math.pi / 2), 0))
+				task.wait(1 / 30)
+			end
+		end)
+	end
+	CollectionService:GetInstanceAddedSignal("DrainGrate"):Connect(lift)
+	player:GetAttributeChangedSignal("GrateUp"):Connect(function()
+		for _, g in ipairs(CollectionService:GetTagged("DrainGrate")) do
+			lift(g)
+		end
+	end)
+	for _, g in ipairs(CollectionService:GetTagged("DrainGrate")) do
+		lift(g)
+	end
 end

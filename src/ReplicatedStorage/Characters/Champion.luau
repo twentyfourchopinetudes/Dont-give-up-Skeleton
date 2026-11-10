@@ -1296,7 +1296,7 @@ local function brain(b)
 			b.hum:MoveTo(b.root.Position)
 			continue
 		end
-		if not boss.phase2 and b.hum.Health <= b.hum.MaxHealth * 0.5 then
+		if not boss.phase2 and not boss.husk and b.hum.Health <= b.hum.MaxHealth * 0.5 then -- (the husk never gets a second wind)
 			boss.attacking = true
 			phase2(b)
 			if C.ArenaSlash and live(b) then
@@ -1460,11 +1460,97 @@ local function fallenKnight(cf)
 	return model
 end
 
+---------------------------------------------------------------------------
+-- THE HUSK (Ossaria.luau's challenge): Caelen as she has him now, on her strings. The same body and his first
+-- phase's moves (never a second wind: no second sword, no arena slash, no mending), and every few seconds a hole of
+-- decay opens round your feet (Config.Ossaria.Knight.Hole). He runs on this file's one `boss`, which is free by
+-- then: the Silver Knight himself is "gone" (M.vanish) before she can be challenged. boss.husk holds Ossaria's hooks.
+---------------------------------------------------------------------------
+local function decayHole(b, at)
+	local HC = Config.Ossaria.Knight.Hole
+	local Heir = Core.Roster.byKind.OssariaHeir -- (the pools of rot are hers: the same in all three phases)
+	local R = HC.Radius
+	local c = Vector3.new(at.X, arena().Centre.Y, at.Z)
+	local parts = Heir.pool(c, R, HC.Delay, true)
+	playSound(parts[1], SOUNDS.Lunge, 0.8, 0.3)
+	task.delay(HC.Delay, function() -- (it opens; a second later it erupts: the only moment it hurts)
+		if live(b) then
+			Heir.erupt(c, R, true)
+			playSound(parts[1], SOUNDS.WatchdogSmash, 0.7, 0.45)
+			hitOnce(playersInRadius(c, R, 6), {}, HC.Damage, c, "Launch")
+		end
+		Heir.unpool(parts)
+	end)
+end
+-- every Every[1]..Every[2] seconds, one under each of you on the sand: its centre a random 0..Radius from your feet,
+-- so even at its farthest its edge still reaches them
+local function decayHoles(b)
+	local HC = Config.Ossaria.Knight.Hole
+	task.spawn(function()
+		while waitLive(b, rand(HC.Every[1], HC.Every[2])) do
+			for _, pl in ipairs(Players:GetPlayers()) do
+				local char, _, hrp = aliveChar(pl)
+				if char and inArena(hrp.Position) then
+					local a, r = rand(0, math.pi * 2), rand(0, HC.Radius)
+					decayHole(b, hrp.Position + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r))
+				end
+			end
+		end
+	end)
+end
+local function huskDied(b)
+	local hooks = boss.husk
+	boss.husk, boss.state = nil, "gone" -- (gone again: nothing of the Silver Knight's comes back after him)
+	if boss.cleanup then
+		boss.cleanup()
+	end
+	ReplicatedStorage:SetAttribute("BossActive", false)
+	ReplicatedStorage:SetAttribute("Music", "none") -- (no victory: she's still up there)
+	FxRemote:FireAllClients("Banner", "HUSK FELLED", "Victory")
+	seal(false)
+	-- (a dead rig is no longer posed) he goes to dust where he stands, from the head down, each piece sinking and
+	-- shrinking away into it; Ossaria's reveal plays over it (hooks.onDied)
+	local at = b.root.Position
+	if hooks.onDied then
+		task.spawn(hooks.onDied, at)
+	end
+	local pieces = {}
+	for _, p in ipairs(b.model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.Anchored = true
+			table.insert(pieces, p)
+		end
+	end
+	table.sort(pieces, function(p, q)
+		return p.Position.Y > q.Position.Y
+	end)
+	local DUST = Color3.fromRGB(70, 62, 58)
+	for i, p in ipairs(pieces) do
+		task.delay(0.5 + 2.2 * i / #pieces, function()
+			if i % 6 == 0 then
+				burst(p.Position, DUST, 6, 0.5, 4)
+			end
+			TweenService:Create(p, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1, Size = p.Size * 0.3, CFrame = p.CFrame - Vector3.new(0, 1.5, 0) }):Play()
+		end)
+	end
+	task.delay(0.6, function()
+		playSound(b.root, SOUNDS.Impact, 0.6, 0.35)
+	end)
+	task.delay(1.4, function()
+		dustCloud(feetAt(at), 5, 22)
+	end)
+	game:GetService("Debris"):AddItem(b.model, 3.6)
+end
+
 local function onDied(b)
-	if boss.gen ~= b.gen or boss.state == "dead" then
+	if boss.gen ~= b.gen or boss.state == "dead" or boss.state == "gone" then
 		return
 	end
+	if boss.husk then
+		return huskDied(b)
+	end
 	boss.state = "dead"
+	Core.Save.mark("Champion")
 	if boss.cleanup then
 		boss.cleanup()
 	end
@@ -1495,6 +1581,7 @@ local function spawn()
 		boss.fallen:Destroy()
 		boss.fallen = nil
 	end
+	boss.centred = false
 	local model, hum, weld = Core.makeRig("Champion", "Champion", S, "ChampionBlade")
 	if not model then
 		return
@@ -1655,7 +1742,7 @@ local function cutscene(b)
 end
 
 local function start()
-	if boss.state ~= "dormant" then
+	if boss.state ~= "dormant" or boss.husk then -- (the husk is started by Ossaria's challenge: M.huskStart)
 		return
 	end
 	boss.state = "intro"
@@ -1664,6 +1751,7 @@ local function start()
 	task.spawn(function()
 		if not boss.seen then
 			boss.seen = true
+			Core.Save.mark("ChampionSeen")
 			if not cutscene(b) then
 				return
 			end
@@ -1716,7 +1804,7 @@ local function anyoneInArena()
 end
 
 local function reset()
-	if boss.state == "dead" or boss.state == "dormant" then
+	if boss.state == "dead" or boss.state == "dormant" or boss.state == "gone" then
 		return
 	end
 	if boss.model then
@@ -1726,6 +1814,13 @@ local function reset()
 	ReplicatedStorage:SetAttribute("Music", "none")
 	clearGlare()
 	seal(false)
+	if boss.husk then -- (Ossaria's knight: gone, and she waits on her sand to be challenged again)
+		local hooks = boss.husk
+		boss.husk, boss.state = nil, "gone"
+		boss.gen += 1
+		hooks.onReset()
+		return
+	end
 	spawn()
 end
 
@@ -1767,7 +1862,7 @@ function M.init(core)
 	task.spawn(function()
 		while true do
 			task.wait(0.25)
-			if boss.state == "dormant" and Map.Champion then
+			if boss.state == "dormant" and not boss.husk and Map.Champion then
 				for _, pl in ipairs(Players:GetPlayers()) do
 					local char, _, hrp = aliveChar(pl)
 					if char and flat(hrp.Position - arena().Centre).Magnitude < arena().Radius - 4 and math.abs(hrp.Position.Y - arena().Centre.Y) < 8 then
@@ -1780,7 +1875,17 @@ function M.init(core)
 	end)
 end
 
-M.spawn = spawn
+M.spawn = function()
+	boss.seen = boss.seen or Core.Save.done("ChampionSeen") -- (his entrance: only ever the first time)
+	if not Core.Save.done("Champion") then
+		return spawn()
+	end
+	-- beaten in this save: on his knees on the sand where he first stood (the Great Stair's moving him to the middle
+	-- takes it from there: init.server)
+	boss.state = "dead"
+	local p = landSpot()
+	boss.fallen = fallenKnight(CFrame.lookAt(p, p + flat(perchPos() - arena().Centre)))
+end
 M.reset = reset
 M.devWound = function() -- (dev menu) one hit from death
 	if boss.hum and boss.hum.Health > 0 then
@@ -1791,12 +1896,121 @@ M.state = function()
 	return boss.state
 end
 M.anyoneInArena = anyoneInArena
+M.seal = seal -- (OssariaHeir.luau: her own fight is on his sand)
+M.inArena = inArena
+-- (init.server: the Great Stair lands round the middle of the sand) he's moved there, swords and all, while nobody's looking
+M.fallenCentred = function()
+	return boss.centred
+end
+M.centreFallen = function()
+	if boss.fallen then
+		local c = Vector3.new(arena().Centre.X, standY(), arena().Centre.Z)
+		boss.fallen:PivotTo(CFrame.lookAt(c, c + Vector3.xAxis)) -- (facing the arch's side, where the road comes in)
+		boss.centred = true
+	end
+end
+-- (Ossaria.luau: her meeting) gone from his sand for good, standing, fighting or on his knees, before she brings the
+-- Heights down onto it; nothing brings him back (state "gone": no reset, no entrance, no Great Stair)
+M.vanish = function()
+	local fighting = boss.state == "fight"
+	boss.gen += 1
+	boss.state = "gone"
+	if fighting and boss.cleanup then
+		pcall(boss.cleanup)
+	end
+	for _, m in ipairs({ boss.model, boss.fallen }) do
+		if m then
+			m:Destroy()
+		end
+	end
+	boss.model, boss.fallen = nil, nil
+	if fighting then
+		ReplicatedStorage:SetAttribute("BossActive", false)
+		ReplicatedStorage:SetAttribute("Music", "none")
+		clearGlare()
+	end
+	seal(false)
+end
+M.devKill = function() -- (dev menu) dead, wherever he stands
+	if boss.hum and boss.hum.Health > 0 then
+		boss.hum.Health = 0
+	end
+end
 -- (init.server's onPlayerDied) someone fell on his sand mid-fight: he has a word for them
 M.onPlayerDied = function(pl)
 	local hrp = pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
-	if boss.state == "fight" and hrp and inArena(hrp.Position) then
+	if boss.state == "fight" and not boss.husk and hrp and inArena(hrp.Position) then
 		FxRemote:FireClient(pl, "Say", boss.phase2 and C.Name2 or C.Name, C.Victor)
 	end
+end
+
+-- (Ossaria.luau) the husk's body, anchored and still at cf, on this file's `boss` but not fighting yet (her cutscene
+-- moves it). dress(model) rots it before it's shown. hooks: onReset() (everyone died: it's gone, she waits again),
+-- onDied() (beaten). Returns the actor (model, hum, root, weld, scale) for her cutscene to pose.
+M.huskSpawn = function(cf, dress, hooks)
+	local H = Config.Ossaria.Knight
+	boss.gen += 1
+	local model, hum = Core.RigBuilder.build("Champion", S)
+	model.Name = "OssariaKnight"
+	pcall(function()
+		model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	end)
+	local weld = Core.giveWeapon(model, "ChampionBlade", S)
+	Core.applyLimbGroup(model)
+	dress(model) -- (before it's parented: the clients read its cloth's colours once)
+	hum.MaxHealth, hum.Health = H.HP, H.HP
+	hum.WalkSpeed = C.WalkSpeed
+	hum.BreakJointsOnDeath = false
+	hum.AutoRotate = false
+	model:SetAttribute("Radius", 2.4)
+	model:SetAttribute("Boss", true)
+	local root = model:FindFirstChild("HumanoidRootPart")
+	root.Anchored = true
+	root.CollisionGroup = "EnemyRoot"
+	model:PivotTo(cf)
+	model.Parent = Core.EnemiesFolder
+	hum.HipHeight = model:GetAttribute("HipHeight")
+	pcall(function()
+		root:SetNetworkOwner(nil)
+	end)
+	boss.model, boss.hum, boss.root = model, hum, root
+	boss.phase2, boss.staggerUntil, boss.poise, boss.lastMove, boss.attacking = false, 0, nil, nil, false
+	boss.state, boss.husk = "dormant", hooks
+	local b = { model = model, hum = hum, root = root, weld = weld, scale = S, gen = boss.gen }
+	boss.current = b
+	hum.HealthChanged:Connect(function(h)
+		if boss.gen == b.gen and boss.state == "fight" then
+			ReplicatedStorage:SetAttribute("BossHP", math.max(0, h))
+		end
+	end)
+	hum.Died:Connect(function()
+		onDied(b)
+	end)
+	return b
+end
+-- (Ossaria.luau, at her cutscene's end) the fight: the seal, his bar, his moves, and the holes
+M.huskStart = function()
+	local b = boss.current
+	if not boss.husk or boss.state ~= "dormant" or not b then
+		return
+	end
+	local H = Config.Ossaria.Knight
+	seal(true)
+	ReplicatedStorage:SetAttribute("BossName", H.Name)
+	ReplicatedStorage:SetAttribute("BossMaxHP", b.hum.MaxHealth)
+	ReplicatedStorage:SetAttribute("BossHP", b.hum.Health)
+	ReplicatedStorage:SetAttribute("BossActive", true)
+	ReplicatedStorage:SetAttribute("Music", "champion")
+	boss.state = "fight"
+	b.root.Anchored = false
+	pcall(function()
+		b.root:SetNetworkOwner(nil)
+		b.hum:ChangeState(Enum.HumanoidStateType.Running)
+	end)
+	idle(b)
+	confine(b)
+	decayHoles(b)
+	task.spawn(brain, b)
 end
 
 return M

@@ -1216,6 +1216,7 @@ local function onDied(b)
 	end
 	local victors = playersInAttic() -- (before the seal lifts: whoever fought him up here)
 	boss.state = "dead"
+	Core.Save.mark("Consul")
 	boss.purple = false
 	ReplicatedStorage:SetAttribute("BossActive", false)
 	ReplicatedStorage:SetAttribute("Music", "victory")
@@ -3646,7 +3647,13 @@ function M.init(core)
 	end)
 end
 
-M.spawn = spawn
+M.spawn = function()
+	if not Core.Save.done("Consul") then
+		return spawn()
+	end
+	boss.state = "dead" -- (fallen in this save: gone, and his spell on the bonfires broken)
+	ReplicatedStorage:SetAttribute("BonfireTravel", true)
+end
 M.reset = reset
 M.brighten = function(dur) -- (init.server's drawbridge cutscene: the sky is day by its end, however far the 45 s fade has got)
 	restoreDay(dur, true)

@@ -115,7 +115,7 @@ task.spawn(function()
 	local dimmed = false
 	while true do
 		task.wait(0.1)
-		if (current == "champion" or current == "championintro") and ReplicatedStorage:GetAttribute("BossActive") then
+		if (current == "champion" or current == "championintro") and ReplicatedStorage:GetAttribute("BossActive") and not ReplicatedStorage:GetAttribute("MusicSteady") then -- (MusicSteady: Ossaria's own fight, on his theme: no second wind at half a bar)
 			local mx = ReplicatedStorage:GetAttribute("BossMaxHP") or 0
 			if mx > 0 then
 				local f = math.clamp(((ReplicatedStorage:GetAttribute("BossHP") or mx) / mx - PHASE2_AT) / DIM_BAND, 0, 1)

@@ -2384,6 +2384,7 @@ function Usher.init(ctx)
 			return
 		end
 		U.state = "dead"
+		ctx.Save.mark("Usher")
 		U.barOn = true
 		hideBar()
 		clearAllPoison() -- the rot dies with her
@@ -2438,6 +2439,17 @@ function Usher.init(ctx)
 
 	api.spawn = function()
 		if U.state == "dead" then
+			return
+		end
+		if ctx.Save.done("Usher") then -- (felled in this save: gone, her growth guttering, the reliquary gate up)
+			U.state = "dead"
+			if ctx.Map.UsherHeart then
+				ctx.Map.UsherHeart:SetAttribute("Base", 0.35)
+			end
+			local gate = ctx.Map.UsherGate
+			if gate then
+				gate:PivotTo(gate:GetPivot() + Vector3.new(0, 11.6, 0))
+			end
 			return
 		end
 		U.gen += 1

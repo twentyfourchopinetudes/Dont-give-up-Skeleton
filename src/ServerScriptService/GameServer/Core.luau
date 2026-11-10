@@ -3,7 +3,8 @@
 -- character; each character's own behaviour lives in ReplicatedStorage/Characters.
 --
 -- WHAT A CHARACTER CAN USE (Core.<name>)
---   world      Config, P (Config.Player), Map, EnemiesFolder, FxRemote, ActionRemote, states (per-player state)
+--   world      Config, P (Config.Player), Map, EnemiesFolder, FxRemote, ActionRemote, states (per-player state),
+--              Save (the save: Save.done(name) / Save.mark(name) for a one-time event, Save.on(name, fn) to replay it)
 --   time/math  now(), flat(v), rand(lo, hi), turnTowards(root, pos, maxRad)
 --   sound      SOUNDS (Slash, Lunge, Unsheath, Groan, Breath, Impact), playSound(parent, id, volume, speed)
 --   effects    burst(pos, color, count, size, speed), fxAnchor(pos), dustCloud(pos, size, count),
@@ -157,8 +158,9 @@ local SOUNDS = {
 	Lightning = { "rbxassetid://132801826635544", "rbxassetid://118075222341359", "rbxassetid://118156993756758" },
 }
 
+local Save = require(script.Parent:WaitForChild("Save"))
 local function playSound(parent, id, volume, speed)
-	if not parent or not parent.Parent or not id or id == "" then
+	if not parent or not parent.Parent or not id or id == "" or Save.quiet then -- (quiet: a save's events replaying)
 		return
 	end
 	local s = Instance.new("Sound")
@@ -825,8 +827,8 @@ game:GetService("RunService").Heartbeat:Connect(function(dt)
 	end
 end)
 
--- level: "Small" | "Medium" | "Large" | "Knockdown" | "Launch" (Config.HitReactions)
-local function damagePlayer(player, amount, fromPos, level)
+-- level: "Small" | "Medium" | "Large" | "Knockdown" | "Launch" (Config.HitReactions); push: optional speed overriding its Push
+local function damagePlayer(player, amount, fromPos, level, push)
 	local st = states[player]
 	local char, hum, hrp = aliveChar(player)
 	if not st or not char then
@@ -834,7 +836,7 @@ local function damagePlayer(player, amount, fromPos, level)
 	end
 	level = REACT[level] and level or "Medium"
 	local t = now()
-	if t >= st.iStart and t <= st.iEnd then
+	if st.devGod or (t >= st.iStart and t <= st.iEnd) then -- (devGod: the dev menu's infinite i-frames)
 		if Config.Debug then
 			print(string.format("[Deflect] hit absorbed by i-frames (%.2fs left)", st.iEnd - t))
 		end
@@ -908,7 +910,7 @@ local function damagePlayer(player, amount, fromPos, level)
 	end
 	local dir = flat(hrp.Position - fromPos)
 	dir = dir.Magnitude > 0.01 and dir.Unit or -flat(hrp.CFrame.LookVector).Unit
-	FxRemote:FireClient(player, "Hurt", dir, level)
+	FxRemote:FireClient(player, "Hurt", dir, level, push)
 	burst(hrp.Position + Vector3.new(0, 1, 0), Color3.fromRGB(110, 10, 10), 16, 0.3, 14)
 	playSound(hrp, SOUNDS.Impact, 0.35, 1.4)
 	return true
@@ -1422,6 +1424,9 @@ task.spawn(function()
 				clearPoison(pl)
 			else
 				local d = math.min(p.opts.DPS * STEP, p.left)
+				if states[pl] and states[pl].devGod then
+					d = 0
+				end
 				hum.Health = math.max(0, hum.Health - d)
 				p.left -= d
 				if p.fill and p.fill.Parent then
@@ -1439,7 +1444,7 @@ task.spawn(function()
 end)
 
 return {
-	Config = Config, P = P, Map = Map, EnemiesFolder = EnemiesFolder, FxRemote = FxRemote, ActionRemote = ActionRemote,
+	Config = Config, P = P, Map = Map, EnemiesFolder = EnemiesFolder, FxRemote = FxRemote, ActionRemote = ActionRemote, Save = Save,
 	states = states, REACT = REACT, Roster = Roster, RigBuilder = RigBuilder,
 	now = now, flat = flat, rand = rand, turnTowards = turnTowards,
 	SOUNDS = SOUNDS, playSound = playSound,

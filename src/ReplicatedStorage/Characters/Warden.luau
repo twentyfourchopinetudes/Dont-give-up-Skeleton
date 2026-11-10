@@ -1,7 +1,11 @@
 --!nonstrict
--- THE OSSUARY WARDEN: the boss beyond the fog. Blackened plate hung with bones, a great mace.
+-- THE OSSUARY WARDEN: the boss beyond the fog. A faceless, nondescript black figure in plate and mail, hung all over
+-- with loose patches of black mail that swing as he moves (Carrier.cloth); a great mace. Scale 2.25 * 1.15.
+-- Every wind-up is a chain of several body beats (settle, heft, rise, hang...) eased into one another, and he
+-- coasts to a stop out of a walk, runs his charge on his own legs and leaps only so far, rather than snapping
+-- into a pose or sliding across the room.
 -- Phase 1: slam (sometimes delayed), low sweep (+backhand), stomp, shoulder charge, shockline.
--- Phase 2 at 50%: flaming mace, leap, fire nova, the three-hit string, burning ground.
+-- Phase 2 at 70%: flaming mace, leap, fire nova, the three-hit string, burning ground.
 -- Tuning: Config.Boss. Moves and how he picks them: BOSS_MOVES near the bottom.
 --
 -- EVERYTHING ABOUT THIS CHARACTER IS IN THIS ONE FILE:
@@ -16,7 +20,7 @@
 -- Flinch, Stagger, Crouch, Air, Roar, Kneel) are shared ones from PuppetMath.
 local M = {}
 M.Kind = "Warden"
-M.Proportions = { girth = 1.2, arm = 1.15, hunch = 0.12, twoHand = -0.9 }
+M.Proportions = { girth = 1.15, arm = 1.12, hunch = 0.08, twoHand = -0.9 }
 M.IdlePose = "BIdle"
 M.Poses = {
 	-- his resting stance: weight low and shifting, the chest heaving
@@ -56,153 +60,114 @@ M.Poses = {
 	WBackFinish = { drop = 0.75, lean = 0.55, twist = -1.4, hip = -0.6, side = -0.16, head = 0.12, look = 0.6, footR = 0.4, footL = -0.9, spread = 0.3, breathe = 3, freeL = 0 },
 	-- (an old spin wind-up: sinks low, feet wide, torso wound all the way round)
 	Coil = { drop = 0.95, lean = 0.35, twist = -1.45, side = -0.08, head = -0.1, footR = -0.6, footL = 0.7, spread = 0.3, la1 = 0.4, la3 = -1.0, lel = 0.4, freeL = 0, breathe = 2.5 },
+	-- IN-BETWEENS (the Wd ones): the beats between his stance and the big poses, so a wind-up is several movements
+	-- eased together instead of one snap. Settle: weight caught on the front foot as he comes out of a walk.
+	WdSettle = { drop = 0.38, lean = 0.26, twist = -0.08, head = 0.12, footR = 0.35, footL = -0.2, spread = 0.12, breathe = 3, freeL = 0 },
+	-- the mace hefted onto his shoulder, the chest rising on a breath
+	WdShoulder = { drop = 0.2, lean = 0.02, twist = 0.24, hip = 0.08, head = -0.08, footR = -0.25, footL = 0.4, spread = 0.12, breathe = 4.5, freeL = 0 },
+	-- up onto the back foot with it overhead, chest lifted, chin up
+	WdRise = { drop = 0.04, lean = -0.48, twist = 0.3, hip = 0.15, head = -0.35, footR = -0.55, footL = 0.55, spread = 0.1, breathe = 3, freeL = 0 },
+	-- hanging at the top: the knees give a little under the weight, the shoulders still back
+	WdHang = { drop = 0.3, lean = -0.36, twist = 0.34, hip = 0.18, head = -0.2, footR = -0.5, footL = 0.6, spread = 0.12, breathe = 2, freeL = 0 },
+	-- the stomp's knee coming up, halfway
+	WdKnee = { drop = 0.28, lean = 0.04, side = 0.12, hip = 0.12, lift = 0.8, footR = 0.4, la1 = 0.4, la3 = -0.8, breathe = 3, freeL = 0 },
+	-- the charge: a foot scraped back along the stone, head down
+	WdPaw = { drop = 0.55, lean = 0.42, twist = -0.15, hip = -0.1, head = -0.12, footR = -0.9, footL = 0.4, lift = 0.35, breathe = 4, freeL = 0 },
+	-- skidding out of the charge: leaning back against it, the front foot braced
+	WdSkid = { drop = 0.6, lean = -0.15, twist = 0.2, head = 0.05, footR = 0.9, footL = -0.5, spread = 0.2, breathe = 4, la1 = 0.7, la3 = -0.9, freeL = 0 },
+	-- straightening out of a recovery on his way back to his stance
+	WdStraighten = { drop = 0.25, lean = 0.22, twist = -0.05, head = 0.12, footR = 0.2, footL = -0.1, spread = 0.1, breathe = 4, freeL = 0 },
 }
-M.Colors = { skin = Color3.fromRGB(46, 44, 42), torso = Color3.fromRGB(40, 38, 36), legs = Color3.fromRGB(36, 34, 32), arms = Color3.fromRGB(40, 38, 36) }
+local BLACK, BLACK_MAIL = Color3.fromRGB(16, 16, 18), Color3.fromRGB(22, 22, 24)
+M.Colors = { skin = BLACK, torso = BLACK_MAIL, legs = BLACK_MAIL, arms = BLACK_MAIL }
+M.FistSkin = true -- (black gauntlets, not the default brown fists)
+
+-- a patch of mail the clients hang off this anchor and swing (Carrier.cloth): its LookVector the side it hangs out on,
+-- its RightVector the way its top edge runs. len/width are at scale 1.
+local function mailPatch(k, onPart, cf, segs, len, width)
+	local p = k.deco(onPart, "MailAnchor", k.V(0.1, 0.1, 0.1), cf, BLACK_MAIL, k.MAT.SmoothPlastic)
+	p.Transparency = 1
+	p:SetAttribute("Segs", segs)
+	p:SetAttribute("Len", len * k.s)
+	p:SetAttribute("Width", width * k.s)
+	p:SetAttribute("Color", BLACK_MAIL)
+	p:SetAttribute("Material", "DiamondPlate")
+	p:SetAttribute("Drag", 0.93)
+	p:SetAttribute("Gravity", 1.4) -- (mail: heavier than cloth, it swings rather than floats)
+	game:GetService("CollectionService"):AddTag(p, "ClothChain")
+end
 
 function M.Look(k)
-	local deco, V, at, rgb, MAT, D, s = k.deco, k.V, k.at, k.rgb, k.MAT, k.D, k.s
+	local deco, V, at, MAT, D, s = k.deco, k.V, k.at, k.MAT, k.D, k.s
 	local cw, ch, cd, hw, hd, aw, lw, la, ua = k.cw, k.ch, k.cd, k.hw, k.hd, k.aw, k.lw, k.la, k.ua
-	-- the Ossuary Warden: blackened plate hung with the bones of the prison
-	local plate, plateDark, bone, surcoat = rgb(48, 46, 44), rgb(30, 29, 28), rgb(176, 168, 146), rgb(60, 18, 16)
-	deco("Chest", "Breastplate", V(cw * 0.95, ch * 0.8, 0.3), at(0, 0.05, -cd / 2 - 0.1), plate, MAT.Metal)
-	deco("Chest", "Backplate", V(cw * 0.95, ch * 0.8, 0.25), at(0, 0.05, cd / 2 + 0.08), plateDark, MAT.Metal)
-	deco("Chest", "Gorget", V(cw * 0.6, 0.4, cd * 1.15), at(0, ch / 2 - 0.05, 0), plateDark, MAT.Metal)
-	deco("Chest", "RibCage", V(cw * 0.5, 0.08, 0.05), at(0, 0.3, -cd / 2 - 0.27), bone)
-	deco("Chest", "RibCage", V(cw * 0.42, 0.08, 0.05), at(0, 0.08, -cd / 2 - 0.27), bone)
-	deco("Chest", "RibCage", V(cw * 0.34, 0.08, 0.05), at(0, -0.14, -cd / 2 - 0.27), bone)
-	deco("Hips", "Faulds", V(hw + 0.2, 0.55, hd + 0.2), at(0, 0.05, 0), plateDark, MAT.Metal)
-	-- a surcoat before and behind, worn ragged at the hem (rough 0.5: torn, not shredded)
-	local rng, hem = Random.new(11), surcoat:Lerp(rgb(18, 10, 8), 0.6)
-	for _, z in ipairs({ -hd / 2 - 0.12, hd / 2 + 0.12 }) do
-		local n, w = 6, hw + 0.1
-		for i = 1, n do
-			local len = rng:NextNumber() < 0.15 and rng:NextNumber(1.1, 1.3) or rng:NextNumber(1.45, 1.7)
-			local top = CFrame.new((-0.5 + (i - 0.5) / n) * w, -0.15, z + (i % 2) * 0.012 * math.sign(z)) -- (alternate rags overlap)
-			k.tatter(rng, "Hips", top, w / n * 1.6, len, surcoat:Lerp(hem, rng:NextNumber(0, 0.3)), hem, 0.5)
-		end
+	-- THE OSSUARY WARDEN: a nondescript black shape of plate and mail - no face, no device, nothing to know him by -
+	-- hung all over with loose patches of black mail that swing and flutter as he moves.
+	local plate, plateDark = Color3.fromRGB(26, 26, 28), Color3.fromRGB(12, 12, 13)
+	local BALL = Enum.PartType.Ball
+	for _, pn in ipairs({ "Chest", "Hips", "RUpperArm", "LUpperArm", "RThigh", "LThigh" }) do
+		k.parts[pn].Material = MAT.DiamondPlate
 	end
+	-- the head: a closed mail coif over it, nothing showing
+	deco("Head", "Coif", V(1.3, 1.36, 1.3), at(0, 0.03, 0.02), BLACK_MAIL, MAT.DiamondPlate)
+	deco("Head", "CoifCrown", V(1.1, 0.2, 1.1), at(0, 0.72, 0.02), plateDark, MAT.DiamondPlate)
+	-- plate: collar, shoulders, elbows, forearms, knees, shins, feet, a plain belt
+	deco("Chest", "Gorget", V(cw * 0.62, 0.45, cd * 1.12), at(0, ch / 2 - 0.05, 0), plate, MAT.Metal)
+	deco("Chest", "GorgetRim", V(cw * 0.68, 0.12, cd * 1.18), at(0, ch / 2 + 0.17, 0), plateDark, MAT.Metal)
+	deco("Hips", "Belt", V(hw + 0.18, 0.28, hd + 0.18), at(0, 0.28, 0), plateDark, MAT.Leather)
 	for _, n in ipairs({ "R", "L" }) do
 		local sx = n == "R" and 1 or -1
-		deco(n .. "UpperArm", "Pauldron", V(aw * 2.1, 0.75, aw * 1.9), at(0, ua / 2 - 0.1, 0), plate, MAT.Metal)
-		deco(n .. "UpperArm", "PauldronSkull", V(0.55, 0.55, 0.55), at(sx * aw * 0.7, ua / 2 + 0.2, 0), plateDark, MAT.SmoothPlastic, Enum.PartType.Ball)
-		deco(n .. "UpperArm", "Spike", V(0.18, 0.8, 0.18), at(sx * aw * 0.55, ua / 2 + 0.55, 0.15) * CFrame.Angles(0, 0, -sx * 0.5), plateDark, MAT.SmoothPlastic)
-		deco(n .. "LowerArm", "Gauntlet", V(aw * 1.2, 0.8, aw * 1.2), at(0, -la / 2 + 0.4, 0), plateDark, MAT.Metal)
+		for i = 0, 2 do
+			deco(n .. "UpperArm", "Pauldron", V(aw * (1.95 - i * 0.1), 0.24, aw * (1.85 - i * 0.1)), at(sx * 0.06, ua / 2 - 0.02 - i * 0.2, 0) * CFrame.Angles(0, 0, -sx * (0.2 + i * 0.12)), i % 2 == 0 and plate or plateDark, MAT.Metal)
+		end
+		deco(n .. "UpperArm", "Couter", V(aw * 1.05, aw * 1.05, aw * 1.05), at(0, -ua / 2, 0.04), plate, MAT.Metal, BALL)
+		deco(n .. "LowerArm", "Vambrace", V(aw * 1.12, la * 0.55, aw * 1.12), at(0, 0.05, 0), plate, MAT.Metal)
+		deco(n .. "LowerArm", "Cuff", V(aw * 1.3, 0.25, aw * 1.3), at(0, -la / 2 + 0.25, 0), plateDark, MAT.Metal)
 	end
-	-- BELOW THE WAIST, A MANGLED MESS (as the Watchdogs are): no pair of legs in plate but a knot of fused flesh and bone,
-	-- the two it walks on not matching - the right swollen, the left wasted and twisted with a toe too many - and more
-	-- that never grew right hanging off the mass: a withered third limb dragging behind, a stub with a claw, spurs. The
-	-- rig's leg boxes are hidden; everything here rides on them, so it still walks as he does.
-	local BALL, CYL = Enum.PartType.Ball, Enum.PartType.Cylinder
-	local flesh, fleshDark, sinew = rgb(66, 38, 34), rgb(40, 24, 22), rgb(120, 64, 54)
-	local tl, sl = D.thigh / s, D.shin / s
-	local function ball(on, d, cf, col, mat)
-		deco(on, "Mangle", V(d, d, d), cf, col, mat or MAT.Fabric, BALL)
-	end
-	local function rod(on, len, d, cf, col, mat) -- (standing along the cf's y)
-		deco(on, "Mangle", V(len, d, d), cf * CFrame.Angles(0, 0, math.pi / 2), col, mat or MAT.Fabric, CYL)
-	end
-	for _, pn in ipairs({ "RThigh", "LThigh", "RShin", "LShin", "RFoot", "LFoot" }) do
-		k.parts[pn].Transparency = 1
-	end
-	-- the mass at the hips both legs grow out of, lopsided, plate fused into it where it burst out of his faulds
-	ball("Hips", hw * 1.05, at(0.1, -0.3, 0), fleshDark)
-	ball("Hips", hw * 0.7, at(hw * 0.32, -0.45, -0.25), flesh)
-	ball("Hips", hw * 0.55, at(-hw * 0.3, -0.5, 0.3), flesh)
-	ball("Hips", 0.5, at(-0.2, -0.8, -hd * 0.5), sinew)
-	deco("Hips", "Mangle", V(0.7, 0.5, 0.12), at(hw * 0.35, -0.3, -hd * 0.62) * CFrame.Angles(0.3, 0.4, 0.5), plateDark, MAT.Metal)
-	deco("Hips", "Mangle", V(0.5, 0.6, 0.12), at(-hw * 0.4, -0.4, hd * 0.6) * CFrame.Angles(-0.4, -0.2, -0.7), plate, MAT.Metal)
-	for _, sp in ipairs({ { 0.5, -0.2, 0.5, 0.9, -0.9, 0.3 }, { -0.6, -0.5, 0.4, 0.7, -1.2, -0.5 }, { 0.1, -0.7, 0.6, 0.6, -1.5, 0.1 } }) do -- (bone driven out the back)
-		deco("Hips", "Mangle", V(0.14, sp[4], 0.14), at(sp[1], sp[2], sp[3]) * CFrame.Angles(sp[5], 0, sp[6]) * at(0, sp[4] / 2, 0), bone, MAT.SmoothPlastic)
-	end
-	-- the withered third limb, out of the back of the mass and trailing on the ground, its claw dragging
-	local drag = at(0.15, -0.55, hd * 0.55) * CFrame.Angles(-0.95, 0.15, 0)
-	rod("Hips", 1.6, 0.36, drag * at(0, -0.8, 0), fleshDark)
-	ball("Hips", 0.42, drag * at(0, -1.6, 0), sinew)
-	rod("Hips", 1.1, 0.26, drag * at(0, -1.6, 0) * CFrame.Angles(0.9, 0, 0) * at(0, -0.55, 0), flesh)
-	for _, x in ipairs({ -0.1, 0.1 }) do
-		deco("Hips", "Mangle", V(0.1, 0.1, 0.4), drag * at(0, -1.6, 0) * CFrame.Angles(0.9, 0, 0) * at(x, -1.15, -0.1), rgb(26, 22, 20), MAT.Slate)
-	end
-	-- a stub on the left that never grew past the elbow, a claw at its end
-	local stub = at(-hw * 0.5, -0.35, -0.1) * CFrame.Angles(0.2, 0, -0.9)
-	rod("Hips", 0.7, 0.3, stub * at(0, -0.35, 0), flesh)
-	deco("Hips", "Mangle", V(0.1, 0.35, 0.1), stub * at(0, -0.8, 0) * CFrame.Angles(0.5, 0, 0), bone, MAT.SmoothPlastic)
-	-- the two it walks on
+	local tl, sl, fs = D.thigh / s, D.shin / s, D.footSize / s
 	for _, n in ipairs({ "R", "L" }) do
-		local sx = n == "R" and 1 or -1
-		local sw = n == "R" and 1.25 or 0.85 -- (the right swollen, the left wasted)
-		local th, sh, ft = n .. "Thigh", n .. "Shin", n .. "Foot"
-		-- thigh: a core with muscle knotted round it, unevenly, and a scrap of the old cuisse sunk in it
-		rod(th, tl, lw * 0.85 * sw, at(0, 0, 0) * CFrame.Angles(0.06, 0, sx * 0.08), flesh)
-		ball(th, lw * 1.1 * sw, at(sx * 0.12, tl * 0.32, -0.1), fleshDark)
-		ball(th, lw * 0.85 * sw, at(-sx * 0.1, -tl * 0.05, 0.22), flesh)
-		ball(th, lw * 0.7 * sw, at(sx * 0.22, -tl * 0.25, -0.15), fleshDark)
-		deco(th, "Mangle", V(lw * 0.9, 0.5, 0.1), at(sx * 0.1, 0.05, -lw * 0.55) * CFrame.Angles(0.15, sx * 0.3, sx * 0.4), plateDark, MAT.Metal)
-		if n == "R" then -- (a cluster of blisters on the swollen one)
-			for _, g in ipairs({ { 0.35, 0.4, 0.1, -0.35 }, { 0.28, 0.45, -0.15, -0.25 }, { 0.22, 0.38, -0.3, -0.42 } }) do
-				ball(th, g[1], at(g[2], g[3], g[4]), sinew)
-			end
-		end
-		-- the knee: a knob of bone, a spur out the back of it
-		ball(th, lw * 0.95, at(0, -tl * 0.5, 0.05), bone:Lerp(fleshDark, 0.4), MAT.Slate)
-		deco(th, "Mangle", V(0.12, 0.12, 0.6), at(0, -tl * 0.45, 0.45) * CFrame.Angles(-0.5, sx * 0.2, 0), bone, MAT.SmoothPlastic)
-		-- shin: twisted and tapering, tendons standing proud down the back, a lump where it set wrong
-		rod(sh, sl, lw * 0.65 * sw, at(0, 0, 0) * CFrame.Angles(-0.05, 0, -sx * 0.1), fleshDark)
-		ball(sh, lw * 0.7 * sw, at(sx * 0.12, sl * 0.15, -0.12), flesh)
-		for _, x in ipairs({ -0.12, 0.12 }) do
-			rod(sh, sl * 0.9, 0.1, at(x, 0, lw * 0.32) * CFrame.Angles(0.1, 0, 0), sinew)
-		end
-		ball(sh, lw * 0.65, at(0, -sl * 0.48, 0), fleshDark) -- (the ankle)
-		-- foot: a heel mass and knuckled toes hooking into claws; the left with one crowded in too many
-		ball(ft, 0.6 * sw, at(0, 0, 0.2), fleshDark)
-		for j, x in ipairs(n == "L" and { -0.24, -0.08, 0.06, 0.2 } or { -0.22, 0, 0.22 }) do
-			local d = (0.28 + (j % 2) * 0.05) * sw
-			local cf = at(x, -0.05, -0.25) * CFrame.Angles(0, -x * 0.6, 0)
-			ball(ft, d, cf, flesh)
-			ball(ft, d * 0.8, cf * at(0, -0.02, -0.22), fleshDark)
-			deco(ft, "Mangle", V(0.1, 0.09, 0.28), cf * at(0, -0.06, -0.45) * CFrame.Angles(-0.6, 0, 0), rgb(26, 22, 20), MAT.Slate)
+		deco(n .. "Thigh", "Poleyn", V(lw * 1.05, lw * 1.05, lw * 1.05), at(0, -tl / 2, -0.08), plate, MAT.Metal, BALL)
+		deco(n .. "Shin", "Greave", V(lw * 1.06, sl * 0.85, lw * 1.06), at(0, 0.02, 0), plate, MAT.Metal)
+		deco(n .. "Foot", "Sabaton", V(fs.X * 1.08, fs.Y * 1.1, fs.Z * 1.04), at(0, 0.01, 0), plateDark, MAT.Metal)
+	end
+	-- under it all, a static mail skirt to the knee (so nothing shows between the loose patches)
+	local rng = Random.new(23)
+	for _, z in ipairs({ -1, 1 }) do
+		for i = 1, 5 do
+			local top = CFrame.new((-0.5 + (i - 0.5) / 5) * (hw + 0.1), 0.05, z * (hd / 2 + 0.06))
+			k.tatter(rng, "Hips", top, (hw + 0.1) / 5 * 1.35, rng:NextNumber(1.15, 1.3), BLACK_MAIL, BLACK, 0.2)
 		end
 	end
-	-- the death-mask: a blackened skull under an iron crown band, a fanged maw, ram's horns.
-	local up = CFrame.Angles(0, 0, math.pi / 2)
-	local black, iron = rgb(14, 13, 13), rgb(34, 32, 30)
-	deco("Head", "Skull", V(1.3, 1.3, 1.3), at(0, 0.12, 0), plate, MAT.Metal, Enum.PartType.Ball)
-	deco("Head", "Jaw", V(0.85, 0.42, 0.85), at(0, -0.5, -0.2), plate, MAT.Metal)
-	deco("Head", "Maw", V(0.8, 0.16, 0.06), at(0, -0.5, -0.64), black, MAT.SmoothPlastic)
-	for i = -2, 2 do -- fangs: long at the corners, short between
-		deco("Head", "Fang", V(0.09, 0.3 - math.abs(i) * 0.04, 0.07), at(i * 0.17, -0.5, -0.67), plateDark, MAT.Metal)
-	end
-	deco("Head", "Nose", V(0.14, 0.2, 0.06), at(0, -0.12, -0.64), black, MAT.SmoothPlastic)
 	for _, sx in ipairs({ -1, 1 }) do
-		deco("Head", "Socket", V(0.42, 0.32, 0.1), at(sx * 0.26, 0.12, -0.62) * CFrame.Angles(0, 0, sx * 0.25), black, MAT.SmoothPlastic)
+		for i = 1, 3 do
+			local top = CFrame.new(sx * (hw / 2 + 0.05), 0.05, (-0.5 + (i - 0.5) / 3) * hd) * CFrame.Angles(0, math.pi / 2, 0)
+			k.tatter(rng, "Hips", top, hd / 3 * 1.35, rng:NextNumber(1.05, 1.2), BLACK_MAIL, BLACK, 0.2)
+		end
 	end
-	-- an iron band round the brow
-	deco("Head", "CrownBand", V(0.2, 1.45, 1.45), at(0, 0.5, 0) * up, iron, MAT.Metal, Enum.PartType.Cylinder)
-	-- great ram's horns: out of the dome, back, down past the ear and forward again in a
-	-- tightening curl that flares away from the head, ridged and tapering to the tip
-	local horn, hornTip = rgb(44, 42, 40), rgb(20, 19, 18) -- blackened like his plate
+
+	-- THE LOOSE MAIL: patches hung all over him that the clients swing (facing: yaw that turns the anchor's look
+	-- from forward (-Z) to the side it hangs on). Short ones on the chest and arms, long ones round the skirt.
+	local FRONT, BACK, RIGHT, LEFT = CFrame.new(), CFrame.Angles(0, math.pi, 0), CFrame.Angles(0, -math.pi / 2, 0), CFrame.Angles(0, math.pi / 2, 0)
+	for _, side in ipairs({ { -1, FRONT }, { 1, BACK } }) do
+		local z, face = side[1] * (cd / 2 + 0.06), side[2]
+		for _, x in ipairs({ -0.62, 0, 0.62 }) do -- (across the breast, under the collar)
+			mailPatch(k, "Chest", at(x * cw / 2, ch / 2 - 0.3, z) * face, 2, 0.32, 0.62)
+		end
+		for _, x in ipairs({ -0.35, 0.35 }) do -- (a lower row, staggered)
+			mailPatch(k, "Chest", at(x * cw / 2, -0.05, z) * face, 2, 0.3, 0.7)
+		end
+		for _, x in ipairs({ -0.6, 0, 0.6 }) do -- (round the skirt: long, to below the knee)
+			mailPatch(k, "Hips", at(x * hw / 2, -0.05, side[1] * (hd / 2 + 0.14)) * face, 3, 0.48, 0.66)
+		end
+	end
 	for _, sx in ipairs({ -1, 1 }) do
-		local N, turns, r0 = 16, 0.9, 0.85
-		local function pt(t)
-			local phi, r = t * turns * math.pi * 2, r0 * (1 - 0.55 * t)
-			return Vector3.new(sx * (0.5 + 0.8 * t ^ 1.3), 0.55 - r0 + r * math.cos(phi), 0.1 + r * math.sin(phi))
+		local face = sx == 1 and RIGHT or LEFT
+		for _, z in ipairs({ -0.25, 0.25 }) do
+			mailPatch(k, "Hips", at(sx * (hw / 2 + 0.14), -0.05, z * hd) * face, 3, 0.46, 0.55)
 		end
-		local p = pt(0)
-		for i = 1, N do
-			local t = i / N
-			local q, d = pt(t), 0.72 * (1 - 0.75 * t)
-			local col = horn:Lerp(hornTip, t * 0.7):Lerp(rgb(0, 0, 0), (i % 2) * 0.12) -- (dark rings: the ridges)
-			-- blocks run along -Z of lookAt; overlap a little so the outside of the curl stays closed
-			deco("Head", "Horn", V(d, d * 0.85, (q - p).Magnitude + d * 0.35), CFrame.lookAt((p + q) / 2 * s, q * s), col, MAT.Metal)
-			p = q
-		end
-	end
-	-- a crown of skulls on the backplate
-	for i = -1, 1 do
-		deco("Chest", "BackSkull", V(0.5, 0.5, 0.5), at(i * 0.55, ch / 2 + 0.05, cd / 2 + 0.3), bone, MAT.SmoothPlastic, Enum.PartType.Ball)
-	end
-	-- eyes: direct children named "Eye" (tell() and phase 2 recolour them)
-	for _, x in ipairs({ -0.26, 0.26 }) do
-		deco("Head", "Eye", V(0.2, 0.1, 0.05), at(x, 0.12, -0.69), rgb(200, 40, 20), MAT.Neon)
+		local n = sx == 1 and "R" or "L"
+		mailPatch(k, n .. "UpperArm", at(sx * (aw / 2 + 0.12), ua / 2 - 0.55, 0) * face, 2, 0.3, 0.55) -- (off the pauldron's edge)
+		mailPatch(k, n .. "LowerArm", at(sx * (aw / 2 + 0.08), la / 2 - 0.1, 0) * face, 2, 0.26, 0.45)
+		mailPatch(k, n .. "Thigh", at(0, tl / 2 - 0.1, -(lw / 2 + 0.1)), 2, 0.34, 0.6)
 	end
 end
 
@@ -289,7 +254,8 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Map, EnemiesFolder, FxRemote, states, now, flat, rand, turnTowards, SOUNDS, playSound, burst, fxAnchor, dustCloud, crackLines, fadeAway, shockwave, groundHeave, debrisChunks, SMOKE, SPARK, pose, bodyPose, setTrail, makeRig, findShoulder, aliveChar, damagePlayer, playersInRadius
 local dropSplinter
 
-local BOSS_SCALE = 3
+local BOSS_SCALE = 2.25 * 1.15
+local K = BOSS_SCALE / 3 -- reach and body-sized hitboxes were tuned at scale 3: they shrink with him
 local SPEED = 1.1 -- everything he does (moves, turns, wind-ups, swings, recoveries) runs this much faster
 local boss: any = {
 	state = "none", -- none | dormant | intro | fight | dead
@@ -306,7 +272,7 @@ local function bossDmg(x)
 end
 
 ---------------------------------------------------------------------------
--- boss: The Ossuary Warden
+-- boss: the old Warden (no longer spawned, see the end of this file)
 ---------------------------------------------------------------------------
 local bossAI -- forward declaration
 
@@ -331,9 +297,17 @@ local function live(b)
 	return boss.gen == b.gen and boss.state == "fight" and b.hum.Parent ~= nil and b.hum.Health > 0
 end
 
+-- back to his stance in two movements: he straightens up out of the recovery, then settles into his guard
 local function bossIdleArm(b)
 	setTrail(b, false)
-	pose(b, "Idle", 0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut) -- settles back, no snap
+	local tok = {}
+	boss.idleTok = tok
+	bodyPose(b, "WdStraighten", 0.4)
+	task.delay(0.35 / SPEED, function()
+		if boss.idleTok == tok and boss.gen == b.gen and b.hum.Parent then
+			pose(b, "Idle", 0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+		end
+	end)
 end
 
 local function leapTo(b, groundPos, duration, damage)
@@ -351,7 +325,8 @@ local function leapTo(b, groundPos, duration, damage)
 	while true do
 		local a = math.min((now() - t0) / duration, 1)
 		local across = a * 0.5 + a * a * (3 - 2 * a) * 0.5 -- eases off the ground and into the landing
-		local pos = startPos:Lerp(endPos, across) + Vector3.new(0, math.sin(a * math.pi) * 16, 0)
+		local arc = 6 + flat(endPos - startPos).Magnitude * 0.3 -- (a short hop stays low, a long one goes high)
+		local pos = startPos:Lerp(endPos, across) + Vector3.new(0, math.sin(a * math.pi) * arc, 0)
 		root.CFrame = CFrame.new(pos) * rot.Rotation
 		if a >= 1 then
 			break
@@ -362,11 +337,11 @@ local function leapTo(b, groundPos, duration, damage)
 		end
 	end
 	local ground = Vector3.new(endPos.X, 0.2, endPos.Z)
-	shockwave(ground, 14)
+	shockwave(ground, 14 * K)
 	playSound(root, SOUNDS.Impact, 1, 0.5)
 	FxRemote:FireAllClients("Shake", ground, 1.4)
 	if damage then
-		for _, pl in ipairs(playersInRadius(ground, 11, 14)) do
+		for _, pl in ipairs(playersInRadius(ground, 11 * K, 14)) do
 			damagePlayer(pl, bossDmg(damage), ground, "Knockdown")
 		end
 	end
@@ -415,6 +390,7 @@ end
 -- Tracks the target for the first `track` seconds. Same false-on-interrupt as windupTrack.
 local EASE, INOUT = Enum.EasingStyle.Sine, Enum.EasingDirection.InOut
 local function draw(b, grip, body, t)
+	boss.idleTok = nil -- (a move has begun: a pending return to stance mustn't land on top of it)
 	pose(b, grip, t, EASE, INOUT)
 	if body then
 		bodyPose(b, body, t)
@@ -433,9 +409,6 @@ local function windupBeats(b, target, list, track)
 		track -= bt[3]
 	end
 	return true
-end
-local function windup2(b, target, gather, full, track)
-	return windupBeats(b, target, { gather, full }, track)
 end
 
 local function waitLive(b, duration)
@@ -687,9 +660,16 @@ local function eruption(pos, radius, damage, level, fiery)
 	end
 end
 
+-- Out of a walk he doesn't freeze mid-stride: he coasts a step or so to a stop while the wind-up starts above it.
 local function stopAndFace(b, target)
-	b.hum:MoveTo(b.root.Position)
 	b.hum.AutoRotate = false
+	local v = flat(b.root.AssemblyLinearVelocity)
+	if v.Magnitude > 2 and not b.root.Anchored then
+		b.hum.WalkSpeed = v.Magnitude * 0.45
+		b.hum:MoveTo(b.root.Position + v.Unit * math.min(v.Magnitude * 0.2, 2.5))
+	else
+		b.hum:MoveTo(b.root.Position)
+	end
 end
 
 -- Every attack opens with a physical tell: the eyes flare and it growls.
@@ -771,11 +751,21 @@ local function bossSlam(b, target, opts)
 	stopAndFace(b, target)
 	tell(b)
 	playSound(b.root, SOUNDS.Unsheath, 0.9, 0.45)
-	if not windup2(b, target, { "BHeft", "BGather", 0.4 * m }, { "Raise", "BRear", 0.85 * m }, 0.875 * m) then
+	-- heft onto the shoulder on a breath, sink his weight, lift it overhead rising onto the back foot, rear the last of the way
+	if not windupBeats(b, target, {
+		{ "BHeft", "WdShoulder", 0.3 * m },
+		{ "BHeft", "BGather", 0.25 * m },
+		{ "Raise", "WdRise", 0.4 * m },
+		{ "Raise", "BRear", 0.3 * m },
+	}, 0.95 * m) then
 		return
 	end
 	if opts.delayed then
-		-- leans back even further, creaking, and the drop comes late
+		-- hangs at the top, knees giving under it, then leans back further still, creaking, and the drop comes late
+		bodyPose(b, "WdHang", 0.25)
+		if not windupTrack(b, 0.25, 0, target) then
+			return
+		end
 		bodyPose(b, "Roar", 0.35)
 		playSound(b.root, SOUNDS.Unsheath, 0.7, 0.32)
 		if not windupTrack(b, 0.35 + math.random() * 0.3, 0, target) then
@@ -783,7 +773,7 @@ local function bossSlam(b, target, opts)
 		end
 	end
 	setTrail(b, true)
-	stepInto(b, 5, 0.25)
+	stepInto(b, 5 * K, 0.25)
 	pose(b, "Mid", 0.06, Enum.EasingStyle.Linear)
 	task.delay(0.06, function()
 		pose(b, "Strike", 0.08)
@@ -791,18 +781,18 @@ local function bossSlam(b, target, opts)
 	end)
 	playSound(b.root, SOUNDS.Lunge, 0.9, 0.5)
 	local seen = {}
-	task.spawn(maceSweep, b, 0.2, 45, "Knockdown", seen, 2.2)
+	task.spawn(maceSweep, b, 0.2, 45, "Knockdown", seen, 2.2 * K)
 	task.wait(0.13 / SPEED)
 	if not live(b) then
 		return
 	end
 	local _, tip = maceEnds(b)
-	local impact = tip or (b.root.Position + flat(b.root.CFrame.LookVector).Unit * 15)
+	local impact = tip or (b.root.Position + flat(b.root.CFrame.LookVector).Unit * 15 * K)
 	impact = Vector3.new(impact.X, 0.2, impact.Z)
-	shockwave(impact, 9)
+	shockwave(impact, 9 * K)
 	playSound(b.root, SOUNDS.Impact, 1, 0.6)
 	FxRemote:FireAllClients("Shake", impact, 1.1)
-	hitOnce(playersInRadius(impact, 6, 10), seen, 30, impact, "Large")
+	hitOnce(playersInRadius(impact, 6 * K, 10), seen, 30, impact, "Large")
 	if boss.phase2 then
 		firePatch(impact, 6, 4)
 	end
@@ -821,7 +811,7 @@ end
 -- Then everything lets go at once, from the feet up - a big step in, the hips leading the shoulders through - and the
 -- mace goes out wide, much further from him than his other blows, right round to his left. opts.followUp (phase 2):
 -- the weight carried on round behind his other side into a second, shorter wind and the backhand back across.
-local REACH = 24 -- studs from where he stands that the sweep's cracks run out to (the swing's tip, plus the step)
+local REACH = 24 * K -- studs from where he stands that the sweep's cracks run out to (the swing's tip, plus the step)
 
 -- the mace's head dragged on the floor: sparks and grit where it is, every few frames, for dur
 local function scrape(b, dur)
@@ -858,7 +848,7 @@ end
 -- but its last link (the follow-through). Returns once the hurting part is over
 local function reap(b, chain, bodyMid, bodyEnd, damage, step)
 	setTrail(b, true)
-	stepInto(b, step, 0.32)
+	stepInto(b, step * K, 0.32)
 	footDust(b, -1, 6)
 	bodyPose(b, bodyMid, 0.24)
 	playSound(b.root, SOUNDS.Slash, 1, 0.42)
@@ -880,7 +870,7 @@ local function reap(b, chain, bodyMid, bodyEnd, damage, step)
 			task.wait(link[2] / SPEED)
 		end
 	end)
-	maceSweep(b, hurt + 0.04, damage, "Large", {}, 2.8)
+	maceSweep(b, hurt + 0.04, damage, "Large", {}, 2.8 * K)
 	FxRemote:FireAllClients("Shake", b.root.Position, 0.5)
 end
 
@@ -889,12 +879,14 @@ local function bossSweep(b, target, opts)
 	local m = tempo()
 	stopAndFace(b, target)
 	local load = 0.55 * m
-	local wind = 0.4 * m + 0.6 * m + load
+	local wind = 0.2 * m + 0.32 * m + 0.6 * m + load
 	tell(b, 0.36, wind / SPEED)
 	playSound(b.root, SOUNDS.Unsheath, 0.8, 0.38)
 	local fade
 	local ok = windupBeats(b, target, {
-		{ "WReapLow", "WPlant", 0.4 * m, function()
+		-- (first the mace let down off his guard, his weight settling, before the foot goes out)
+		{ "BSweepGather", "WdSettle", 0.2 * m },
+		{ "WReapLow", "WPlant", 0.32 * m, function()
 			footDust(b, -1, 5)
 		end },
 		{ "WReapHaul", "WHaul", 0.6 * m, function()
@@ -905,7 +897,7 @@ local function bossSweep(b, target, opts)
 			fade = sweepCracks(b, load / SPEED)
 			playSound(b.root, SOUNDS.Breath, 0.9, 0.5)
 		end },
-	}, 0.4 * m + 0.6 * m) -- (tracks you through the plant and the haul; the load is committed)
+	}, 0.2 * m + 0.32 * m + 0.6 * m) -- (tracks you through the settle, the plant and the haul; the load is committed)
 	if fade then
 		fade()
 	end
@@ -946,23 +938,29 @@ local function bossStomp(b)
 	local m = tempo()
 	stopAndFace(b, nil)
 	tell(b, 0.45)
-	if not windup2(b, nil, { "BHeft", "BStompGather", 0.3 * m }, { "Mid", "StompLift", 0.55 * m }, 0) then
+	-- settles, rocks his weight over onto the planted leg, the knee comes up halfway, then all the way
+	if not windupBeats(b, nil, {
+		{ "BHeft", "WdSettle", 0.2 * m },
+		{ "BHeft", "BStompGather", 0.28 * m },
+		{ "Mid", "WdKnee", 0.25 * m },
+		{ "Mid", "StompLift", 0.32 * m },
+	}, 0) then
 		return
 	end
 	b.model:SetAttribute("Airborne", true) -- (the boss footing in Core lets him leave the floor)
 	task.delay(0.45, function()
 		b.model:SetAttribute("Airborne", nil)
 	end)
-	b.root.AssemblyLinearVelocity = Vector3.new(0, 30, 0)
+	b.root.AssemblyLinearVelocity = Vector3.new(0, 30 * K, 0)
 	bodyPose(b, "Strike", 0.12)
 	if not waitLive(b, 0.32) then
 		return
 	end
-	local ground = Vector3.new(b.root.Position.X, 0.2, b.root.Position.Z) + flat(b.root.CFrame.LookVector) * 2
-	shockwave(ground, 12)
+	local ground = Vector3.new(b.root.Position.X, 0.2, b.root.Position.Z) + flat(b.root.CFrame.LookVector) * 2 * K
+	shockwave(ground, 12 * K)
 	playSound(b.root, SOUNDS.Impact, 1, 0.45)
 	FxRemote:FireAllClients("Shake", ground, 1)
-	hitOnce(playersInRadius(ground, 9.5, 14), {}, 26, ground, "Medium")
+	hitOnce(playersInRadius(ground, 9.5 * K, 14), {}, 26, ground, "Medium")
 	if waitLive(b, 0.8 * m) then
 		bossIdleArm(b)
 	end
@@ -973,6 +971,8 @@ end
 local chargeParams = RaycastParams.new()
 chargeParams.FilterType = Enum.RaycastFilterType.Exclude
 
+local CHARGE_TOP = 30 -- studs/s flat out (a sprinting player makes 19, a roll 26)
+local CHARGE_ACCEL = 46 -- studs/s per second: most of a second to get up to speed, so you see it build
 local function bossCharge(b, target)
 	local tr = target:FindFirstChild("HumanoidRootPart")
 	if not tr then
@@ -981,24 +981,23 @@ local function bossCharge(b, target)
 	local m = tempo()
 	stopAndFace(b, target)
 	tell(b, 0.3)
-	task.delay(0.3 * m, function()
-		if live(b) then
-			footDust(b, 1, 6)
-			playSound(b.root, SOUNDS.Impact, 0.4, 0.35)
-		end
-	end)
-	task.delay(0.65 * m, function()
-		if live(b) then
-			footDust(b, 1, 6)
-			playSound(b.root, SOUNDS.Impact, 0.4, 0.35)
-		end
-	end)
-	if not windup2(b, target, { "BSweepGather", "BChargeSet", 0.35 * m }, { "BSweepBack", "Charge", 0.65 * m }, 0.85 * m) then
+	local function paw()
+		footDust(b, 1, 6)
+		playSound(b.root, SOUNDS.Impact, 0.4, 0.35)
+	end
+	-- sinks and squares up, scrapes a foot back, sets again, scrapes it again, then drops his shoulder
+	if not windupBeats(b, target, {
+		{ "BSweepGather", "BChargeSet", 0.25 * m },
+		{ "BSweepGather", "WdPaw", 0.22 * m, paw },
+		{ "BSweepGather", "BChargeSet", 0.18 * m },
+		{ "BSweepGather", "WdPaw", 0.2 * m, paw },
+		{ "BSweepBack", "Charge", 0.3 * m },
+	}, 0.95 * m) then
 		return
 	end
-	local root = b.root
+	local root, hum = b.root, b.hum
 	local dir = flat(root.CFrame.LookVector).Unit
-	local dist = math.clamp(flat(tr.Position - root.Position).Magnitude + 10, 12, 44)
+	local dist = math.clamp(flat(tr.Position - root.Position).Magnitude + 8 * K, 10, 36)
 	local ignore = { EnemiesFolder, Map.Bars }
 	for _, pl in ipairs(Players:GetPlayers()) do
 		if pl.Character then
@@ -1006,34 +1005,33 @@ local function bossCharge(b, target)
 		end
 	end
 	chargeParams.FilterDescendantsInstances = ignore
-	local hitWall = false
-	local res = workspace:Raycast(root.Position, dir * (dist + 4), chargeParams)
-	if res then
-		dist = math.max(res.Distance - 4, 0)
-		hitWall = true
-	end
-	root.Anchored = true
+	-- He runs it on his own legs (the humanoid's walk, so the puppeteer strides him), building speed step by step
+	-- rather than being slid across the floor; a wall or pillar just ahead stops him dead.
 	local start = root.Position
-	local rot = root.CFrame.Rotation
-	local dur = math.max(dist / 48, 0.12)
-	local seen = {}
-	local t0 = now()
-	local nextDust = 0
+	local speed, seen, nextDust, hitWall = walkSpeed() * 0.5, {}, 0, false
+	local t0, last = now(), now()
 	while live(b) do
-		local a = math.min((now() - t0) / dur, 1)
-		local eased = a * 0.5 + (1 - math.cos(a * math.pi)) / 4 -- builds up speed, then skids to a stop
-		local pos = start + dir * dist * eased
-		root.CFrame = CFrame.new(pos) * rot
-		for _, pl in ipairs(playersInRadius(pos, 5.5, 12)) do
+		local t = now()
+		speed = math.min(speed + CHARGE_ACCEL * (t - last), CHARGE_TOP)
+		last = t
+		hum.WalkSpeed = speed
+		hum:MoveTo(root.Position + dir * 12)
+		local pos = root.Position
+		for _, pl in ipairs(playersInRadius(pos, 5.5 * K, 12)) do
 			if not seen[pl] and damagePlayer(pl, bossDmg(32), pos - dir * 3, "Large") then
 				seen[pl] = true
 			end
 		end
-		if now() > nextDust then
-			nextDust = now() + 0.07
+		if t > nextDust then
+			nextDust = t + 0.12
 			dustCloud(Vector3.new(pos.X, 0.6, pos.Z), 1.2, 3)
 		end
-		if a >= 1 then
+		if workspace:Raycast(pos, dir * (3 * K + speed * 0.1), chargeParams) then
+			hitWall = true
+			break
+		end
+		-- (the time limit: something soft in his way he can't push through)
+		if flat(pos - start).Magnitude >= dist or t - t0 > dist / CHARGE_TOP * 1.6 + 0.8 then
 			break
 		end
 		RunService.Heartbeat:Wait()
@@ -1041,18 +1039,16 @@ local function bossCharge(b, target)
 	if not live(b) then
 		return
 	end
-	root.Anchored = false
-	snapToGround(b)
-	pcall(function()
-		root:SetNetworkOwner(nil)
-	end)
 	if hitWall then
 		-- rammed the wall: stunned, wide open
-		local wallPoint = Vector3.new(root.Position.X, 0.2, root.Position.Z) + dir * 4
-		shockwave(wallPoint, 7)
+		hum.WalkSpeed = walkSpeed()
+		hum:MoveTo(root.Position)
+		local wallPoint = Vector3.new(root.Position.X, 0.2, root.Position.Z) + dir * 3 * K
+		shockwave(wallPoint, 7 * K)
 		playSound(root, SOUNDS.Impact, 1, 0.4)
 		FxRemote:FireAllClients("Shake", root.Position, 1.2)
 		boss.staggerUntil = now() + 1.6
+		boss.idleTok = nil
 		pose(b, "Flinch", 0.15)
 		bodyPose(b, "Stagger", 0.15)
 		task.delay(1.6, function()
@@ -1062,8 +1058,26 @@ local function bossCharge(b, target)
 		end)
 		return
 	end
-	bodyPose(b, "Recover", 0.3) -- skids to a stop, winded
-	if waitLive(b, 1.1 * m) then
+	-- skids out of it: leaning back against his own weight, the front foot braced, sliding to a stop
+	bodyPose(b, "WdSkid", 0.18)
+	local skid0, top = now(), speed
+	while live(b) and now() - skid0 < 0.4 do
+		local f = (now() - skid0) / 0.4
+		hum.WalkSpeed = math.max(top * (1 - f), 0.1)
+		hum:MoveTo(root.Position + dir * 6)
+		if now() > nextDust then
+			nextDust = now() + 0.08
+			footDust(b, 1, 4)
+		end
+		RunService.Heartbeat:Wait()
+	end
+	if not live(b) then
+		return
+	end
+	hum.WalkSpeed = walkSpeed()
+	hum:MoveTo(root.Position)
+	bodyPose(b, "Recover", 0.35) -- winded
+	if waitLive(b, 0.9 * m) then
 		bossIdleArm(b)
 	end
 end
@@ -1083,11 +1097,17 @@ local function bossShockline(b, target)
 	aim = aim.Magnitude > 0.1 and aim.Unit or Vector3.new(0, 0, 1)
 	tell(b, 0.28)
 	playSound(b.root, SOUNDS.Unsheath, 0.9, 0.38)
-	if not windup2(b, nil, { "BHeft", "BGather", 0.35 * m }, { "Raise", "Roar", 0.6 * m }, 0) then
+	-- heft, sink, lift it high on his toes, then reared right back, head thrown up
+	if not windupBeats(b, nil, {
+		{ "BHeft", "WdShoulder", 0.25 * m },
+		{ "BHeft", "BGather", 0.2 * m },
+		{ "Raise", "WdRise", 0.25 * m },
+		{ "Raise", "Roar", 0.3 * m },
+	}, 0) then
 		return
 	end
 	setTrail(b, true)
-	stepInto(b, 3, 0.2)
+	stepInto(b, 3 * K, 0.2)
 	pose(b, "Mid", 0.06, Enum.EasingStyle.Linear)
 	task.delay(0.06, function()
 		pose(b, "Strike", 0.08)
@@ -1098,7 +1118,7 @@ local function bossShockline(b, target)
 		return
 	end
 	local _, tip = maceEnds(b)
-	local origin = tip or (b.root.Position + flat(b.root.CFrame.LookVector).Unit * 15)
+	local origin = tip or (b.root.Position + flat(b.root.CFrame.LookVector).Unit * 15 * K)
 	origin = Vector3.new(origin.X, 0.2, origin.Z)
 	shockwave(origin, 6)
 	playSound(b.root, SOUNDS.Impact, 1, 0.55)
@@ -1139,17 +1159,30 @@ local function bossLeap(b, target)
 	end
 	stopAndFace(b, target)
 	tell(b, 0.3)
-	if not windup2(b, target, { "BHeft", "BGather", 0.3 }, { "Raise", "Crouch", 0.55 }, 0.85) then
+	-- settles, draws himself up to fix where you are (chin up, mace raised), then sinks deep into his legs
+	if not windupBeats(b, target, {
+		{ "BHeft", "WdSettle", 0.25 },
+		{ "Raise", "WdRise", 0.3 },
+		{ "Raise", "Crouch", 0.45 },
+	}, 0.85) then
 		return
 	end
-	local landing = tr.Parent and tr.Position or b.root.Position
+	-- He's a man, not a catapult: the leap reaches only so far (it closes a gap, it doesn't cross the room),
+	-- and the further it goes, the longer and higher he hangs in the air.
+	local LEAP_MAX = 26
+	local want = tr.Parent and tr.Position or b.root.Position
+	local off = flat(want - b.root.Position)
+	if off.Magnitude > LEAP_MAX then
+		off = off.Unit * LEAP_MAX
+	end
+	local landing = b.root.Position + off
 	landing = Vector3.new(math.clamp(landing.X, -38, 38), 0, math.clamp(landing.Z, 222, 286))
 	footDust(b, 1, 8)
 	footDust(b, -1, 8)
 	setTrail(b, true)
 	pose(b, "Strike", 0.8)
-	bodyPose(b, "Air", 0.15)
-	leapTo(b, landing, 0.9, 38)
+	bodyPose(b, "Air", 0.25)
+	leapTo(b, landing, 0.7 + off.Magnitude / 40, 38)
 	if not live(b) then
 		return
 	end
@@ -1183,7 +1216,12 @@ local function bossNova(b)
 	local radius = fiery and 18 or 15
 	stopAndFace(b, nil)
 	tell(b, 0.25)
-	draw(b, "Idle", "Kneel", 0.7)
+	-- lets the mace down and sags over it before he goes to one knee
+	draw(b, "BSweepGather", "WdSettle", 0.3)
+	if not windupTrack(b, 0.3, 0, nil) then
+		return
+	end
+	draw(b, "Idle", "Kneel", 0.6)
 	playSound(b.root, SOUNDS.Groan, 1, 0.25)
 	local ground = Vector3.new(b.root.Position.X, 0.2, b.root.Position.Z)
 	local cool, unscorch, gather
@@ -1323,14 +1361,15 @@ end
 -- min/max = distance band (studs). behind = good answer to you being behind it.
 -- fast = used to punish you drinking a flask.
 local BOSS_MOVES = {
-	{ name = "Slam", min = 6, max = 17, weight = 3, cd = 0, fast = false, fn = function(b, t) bossSlam(b, t, { delayed = math.random() < (boss.phase2 and 0.5 or 0.3) }) end },
-	{ name = "Sweep", min = 5, max = 21, weight = 3, cd = 0, fast = true, fn = function(b, t) bossSweep(b, t, { followUp = boss.phase2 and math.random() < 0.6 }) end }, -- (the backhand: phase 2 only)
-	{ name = "Stomp", min = 0, max = 9, weight = 2, cd = 4, behind = true, fn = function(b) bossStomp(b) end },
-	{ name = "Charge", min = 14, max = 42, weight = 3, cd = 6, fast = true, fn = bossCharge },
+	-- (melee bands are in K: they shrink with his reach)
+	{ name = "Slam", min = 6 * K, max = 17 * K, weight = 3, cd = 0, fast = false, fn = function(b, t) bossSlam(b, t, { delayed = math.random() < (boss.phase2 and 0.5 or 0.3) }) end },
+	{ name = "Sweep", min = 5 * K, max = 21 * K, weight = 3, cd = 0, fast = true, fn = function(b, t) bossSweep(b, t, { followUp = boss.phase2 and math.random() < 0.6 }) end }, -- (the backhand: phase 2 only)
+	{ name = "Stomp", min = 0, max = 9 * K, weight = 2, cd = 4, behind = true, fn = function(b) bossStomp(b) end },
+	{ name = "Charge", min = 14 * K, max = 36, weight = 3, cd = 6, fast = true, fn = bossCharge },
 	{ name = "Shockline", min = 12, max = 50, weight = 2, cd = 7, fn = bossShockline },
 	{ name = "Leap", min = 18, max = 70, weight = 3, cd = 9, phase2 = true, fn = bossLeap },
 	{ name = "Nova", min = 0, max = 12, weight = 2, cd = 12, behind = true, fn = function(b) bossNova(b) end }, -- (both phases: fire only in phase 2)
-	{ name = "String", min = 6, max = 15, weight = 2, cd = 8, phase2 = true, fn = bossString },
+	{ name = "String", min = 6 * K, max = 15 * K, weight = 2, cd = 8, phase2 = true, fn = bossString },
 }
 
 local function pickMove(dist, behind, healing)
@@ -1385,7 +1424,7 @@ local function stalk(b, tr)
 	if rel.Magnitude < 0.1 then
 		return
 	end
-	local keep = math.clamp(rel.Magnitude, 9, 16)
+	local keep = math.clamp(rel.Magnitude, 9 * K, 16 * K)
 	local around = CFrame.Angles(0, boss.stalkSide * 0.55, 0):VectorToWorldSpace(rel.Unit) * keep
 	b.hum.WalkSpeed = walkSpeed() * 0.7 -- circles with a heavier, slower step than when he closes in
 	b.hum:MoveTo(tr.Position + around)
@@ -1456,10 +1495,10 @@ bossAI = function(b)
 			end
 			boss.stalkSide = math.random() < 0.5 and -1 or 1
 			boss.stalkUntil = now() + (boss.phase2 and rand(0.11, 0.45) or rand(0.26, 0.83)) + (Config.Boss.IdleExtra or 0) -- (25% shorter than it was)
-		elseif dist < 7 then
+		elseif dist < 7 * K then
 			-- you're hugging it and its close-range tools are on cooldown: back off to make room
 			b.hum.WalkSpeed = walkSpeed() * 0.8
-			b.hum:MoveTo(b.root.Position - rel.Unit * 8)
+			b.hum:MoveTo(b.root.Position - rel.Unit * 8 * K)
 			boss.faceAt = tr
 		else
 			-- nothing in range: close in, turning as it walks
@@ -1533,7 +1572,7 @@ local function spawnBoss()
 	hum.Health = Config.Boss.HP
 	hum.WalkSpeed = walkSpeed()
 	hum.BreakJointsOnDeath = false
-	model:SetAttribute("Radius", 3.6)
+	model:SetAttribute("Radius", 3.6 * K)
 	model:SetAttribute("Boss", true)
 	local root = model:FindFirstChild("HumanoidRootPart")
 	model:PivotTo(Map.BossHome + Vector3.new(0, 3 * BOSS_SCALE - 3, 0))
@@ -1667,6 +1706,7 @@ function M.init(core)
 				local actor = boss.current
 				local root = boss.root
 				boss.staggerUntil = t + Config.Boss.Stagger
+				boss.idleTok = nil -- (a pending return to stance mustn't cut the stagger short)
 				setTrail(actor, false)
 				pose(actor, "Flinch", 0.15)
 				bodyPose(actor, "Stagger", 0.12) -- reels back, wide open
@@ -1684,24 +1724,10 @@ function M.init(core)
 	end)
 end
 
-M.spawn = function()
-	spawnBoss()
-end
-M.start = function()
-	startBoss()
-end
-M.reset = function()
-	resetBoss()
-end
-M.state = function()
-	return boss.state
-end
-M.isDead = function()
-	return boss.state == "dead"
-end
-M.model = function()
-	return boss.model
-end
-M.anyoneInArena = anyoneAliveInArena
+-- THE WARDEN that fights is ReplicatedStorage/WardenFight's (Config.Boss.Trial: the Bell Warden). Everything that asks for
+-- the Warden gets that one. This old one no longer spawns: only its Grips and poses are still in use (the Castellan
+-- swings through them).
+local Fight = require(ReplicatedStorage:WaitForChild("WardenFight"))
+M.spawn, M.start, M.reset, M.state, M.isDead, M.model, M.anyoneInArena = Fight.spawn, Fight.start, Fight.reset, Fight.state, Fight.isDead, Fight.model, Fight.anyoneInArena
 
 return M

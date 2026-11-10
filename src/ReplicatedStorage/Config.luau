@@ -242,12 +242,41 @@ Config.Armor = {
 	DarkHood = { Name = "Dark Hood", Slots = { "Head" }, Stats = { Darkness = 1 } },
 	-- the blazing chest in the Underfire's side chamber (key PotbellyArmor): heavy - much more health, slower on your feet.
 	-- MoveSpeed = your walk/sprint speed multiplier while it's worn (nil = 1)
-	PotbellyArmor = { Name = "Armor of a Lion Hunter", Slots = { "Body" }, Health = 0.9, Grow = 1.15, MoveSpeed = 0.85, Regen = { Amount = 1, Every = 0.5 } },
+	-- the chest under the chapel's loft in Pyralis Bulwark: your head wreathed in fire - stronger fire, a frailer body
+	VeilOfFlame = { Name = "Veil of Flame", Slots = { "Head" }, Health = -0.4, Stats = { Fire = 4 } },
+	PotbellyArmor = { Name = "Armor of a Lion Hunter", Slots = { "Body" }, Health = 0.9, Grow = 1.15, MoveSpeed = 0.85 }, -- (no Regen: that is Caelen's alone)
+	-- the Pyre Priests' own, in two chests hidden in the Palace of Pyralis (Armor.wearPyreMask / wearPyreRobes): the
+	-- vestments make you tall and gaunt as they are
+	PyreMask = { Name = "Pyre Priest's Mask", Slots = { "Head" }, Stats = { Fire = 3 } },
+	PyreRobes = { Name = "Pyre Priest's Vestments", Slots = { "Body" }, Stats = { Fire = 3 }, Grow = 1.1 },
+	-- found in chests of their own up and down the world (init.server's ARMOR CHESTS; how each looks: Armor.Wear)
+	TurnkeyCoif = { Name = "Turnkey's Coif", Slots = { "Head" }, Health = 0.2 },
+	HangmanHood = { Name = "Hangman's Hood", Slots = { "Head" }, Health = 0.15, Stats = { Strength = 1 } },
+	Tricorne = { Name = "Townwarden's Tricorne", Slots = { "Head" }, Health = 0.15, Stats = { Nobility = 1 } },
+	MourningVeil = { Name = "Widow's Mourning Veil", Slots = { "Head" }, Stats = { Darkness = 2 } },
+	ChampionGalea = { Name = "Crowned Champion's Galea", Slots = { "Head" }, Health = 0.3, Stats = { Strength = 1 } },
+	SentinelSallet = { Name = "Bulwark Sentinel's Sallet", Slots = { "Head" }, Health = 0.3, Stats = { Fire = 1 } },
+	DrifterHat = { Name = "Drifter's Hat", Slots = { "Head" }, Health = 0.15, Stats = { Speed = 1 } },
+	Brigandine = { Name = "Pikeman's Brigandine", Slots = { "Body" }, Health = 0.25, Stats = { Strength = 1 } },
+	GaolerCoat = { Name = "Jailer's Long Coat", Slots = { "Body" }, Health = 0.2 },
+	Sackcloth = { Name = "Penitent's Sackcloth", Slots = { "Body" }, Stats = { Darkness = 1, Decay = 1 } },
+	Tailcoat = { Name = "Steward's Tailcoat", Slots = { "Body" }, Health = 0.15, Stats = { Nobility = 1, Speed = 1 } },
+	HunterCoat = { Name = "Nightwatch Greatcoat", Slots = { "Body" }, Health = 0.25, Stats = { Speed = 1 } },
+	Patchwork = { Name = "Ragpicker's Patchwork", Slots = { "Body" }, Health = 0.2, Stats = { Decay = 1 } },
+	Oilskin = { Name = "Mire-Diver's Oilskin", Slots = { "Body" }, Health = 0.25, Stats = { Decay = 1 } },
+	ChampionHarness = { Name = "Crowned Champion's Harness", Slots = { "Body" }, Health = 0.25, Stats = { Strength = 2 } },
+	EmberDoublet = { Name = "Ember Court Doublet", Slots = { "Body" }, Health = 0.15, Stats = { Nobility = 1, Fire = 1 } },
+	HeadsmanJerkin = { Name = "Headsman's Jerkin", Slots = { "Body" }, Health = 0.3, Stats = { Strength = 1 } },
 }
 Config.ArmorSets = {
 	{ Pieces = { "DarkCloak", "DarkHood" }, Stats = { Darkness = 1 }, Aura = 2 }, -- (3 Darkness in all)
 }
-Config.ArmorOrder = { "Helmet", "Motley", "DarkCloak", "DarkHood", "CaelenArmor", "PotbellyArmor" }
+Config.ArmorOrder = {
+	"Helmet", "Motley", "DarkCloak", "DarkHood", "VeilOfFlame", "PyreMask",
+	"TurnkeyCoif", "HangmanHood", "Tricorne", "MourningVeil", "ChampionGalea", "SentinelSallet", "DrifterHat",
+	"CaelenArmor", "PotbellyArmor", "PyreRobes",
+	"Brigandine", "GaolerCoat", "Sackcloth", "Tailcoat", "HunterCoat", "Patchwork", "Oilskin", "ChampionHarness", "EmberDoublet", "HeadsmanJerkin",
+}
 -- the dark aura's look (Armor.luau): an asset id - a VFX model (its particle emitters are
 -- used as they are), or an image/decal (the haze is drawn with it). 0 = the built-in haze
 Config.DarkAuraAsset = 108947832678179
@@ -420,6 +449,8 @@ Config.HitReactions = {
 	Knockdown = { Stun = 1.5, Push = 26, IFrom = 0.2, ITo = 1.25, RollOut = 0.8, Down = true },
 	-- sent flying: a knockdown thrown up (Lift, studs/s) and far (Push for PushTime) (the Silver Knight)
 	Launch = { Stun = 1.8, Push = 50, PushTime = 0.5, Lift = 34, IFrom = 0.15, ITo = 1.5, RollOut = 1.0, Down = true },
+	-- shoved by something moving into you (the Censery's blades): a short flinch, carried along at its speed (damagePlayer's push)
+	Shove = { Stun = 0.3, Push = 16, PushTime = 0.3 },
 	Grabbed = { Stun = 0.5, Push = 0 }, -- held in a dog's jaws: rooted, nothing pushes you (Characters/Dog)
 }
 
@@ -444,7 +475,8 @@ Config.Music = {
 }
 
 Config.Boss = {
-	Name = "The Ossuary Warden",
+	Name = "Bell Warden", -- (the rest of his tuning is in Characters/WardenTollkeeper)
+	Trial = "Tollkeeper", -- the boss we're going with (the other candidates - Turnkey | Plate | Bones | Bell | ChainedBell | LockedBell - are legacy: nothing reaches them)
 	HP = 950, -- (was 715)
 	DamageScale = 0.9, -- multiplies every boss hit (slams, sweeps, eruptions, fire...)
 	IdleExtra = 0.11, -- extra seconds he circles you between attacks (was 0.15)
@@ -614,6 +646,75 @@ Config.Champion = {
 	FallenAfter = "Go. The Bastion waits above... and so does she.",
 	Gift = "Caelen's Twin Blades (needs 3 Strength) and Caelen's Silver Plate. Press T to choose weapons and armor.",
 	SilverKey = "Silver Key. Bright and cold, untarnished by two hundred years. One of three.",
+	-- as the Great Stair comes down (init.server), with all three keys on the sand
+	StairLines = {
+		"All three... I can feel them from here. Look up, Skeleton. The Bastion remembers the way down.",
+		"Two hundred years I knelt beneath that door. Go up. Whatever's left of her home is yours to answer.",
+	},
+}
+
+-- THE KING OF PYRALIS, beaten (Characters/KingInquisitor): he goes down on his knees in the Sunken Court and stays
+-- there, and talks to you - a line each time (Fallen), then FallenAfter over and over. On line FlameKeyAt he gives you
+-- the Key of Flame (attribute "FlameKey"); on FoulKeyAt, his sister's, the Foul Key ("FoulKey").
+Config.King = {
+	Name = "King of Pyralis",
+	Dying = "Enough... Enough. On my knees, in my own court. Hah... so the fire chooses you, Skeleton.",
+	Fallen = {
+		"Stay your blade. I'll not rise again - not today. You've earned what I carry. And you've earned the telling of it.",
+		"This is my key. The land above the colosseum gave one to each of its children - three children, three keys. Mine has run hot since the day I took it up. The Key of Flame, they call it now. Take it.",
+		"And this. <font color=\"rgb(150,190,90)\">The Foul Key - my sister Ossaria's key. I took it from her. Now I give it to you.</font> Hold it away from you - it's warm, and it whispers.",
+		"You've met my brother, I'd wager. Caelen, kneeling on his sand, keeping his oath to a sealed door. Did he speak of our sister? Ossaria.",
+		"Caelen held her off for two hundred years. I took her key from her in a single night. Shall I tell you how?",
+		"Old Pyralis was sick. I let it be known that only she could cure it. She came down off her heights to feed on it, as I knew she would... and I shut the gate behind her.",
+		"Shut her in with my city. With my people. With every man of my guard - and they held those doors while she clawed at them, and they rotted holding them.",
+		"She gave up her key to be let out. I trapped her, and I took it... and I left the gate shut. My men, my kingdom, my own crown's people. That was the price, and I paid it.",
+		"So you hold both: my key, and the one I took from her. I entrust them to you, freely. But I ask one thing of you in return.",
+		"In the days of old Pyralis there was a tailor at my court. Giles. The most endearing, most devout man ever to thread a needle - he sewed my coronation robes, and wept the whole time.",
+		"When the gate shut I never learned what became of him. If the Dark Sister found him, he's dead, or hiding somewhere she can't reach. Find him for me, Skeleton. Find Giles.",
+	},
+	FlameKeyAt = 2,
+	FoulKeyAt = 3,
+	LineHold = 2, -- (seconds each line is on screen before talking again moves him on)
+	-- the big banners as each key is given (title, a smaller line under it)
+	FlameKeyBanner = "KEY OF FLAME\nGiven to you by the King of Pyralis",
+	FoulKeyBanner = "THE FOUL KEY\nTaken from his sister Ossaria by the King of Pyralis - and given to you",
+	FallenAfter = "Find Giles. And keep that foul thing away from your heart.",
+	FlameKey = "Key of Flame. A key of the land above the colosseum, gone hot in its keeper's hand and never cooled since. One of three.",
+	FoulKey = "The Foul Key. Ossaria's own: soft-edged, sweating, warm as something living. One of three.",
+}
+
+-- THE GILDED HEIGHTS' COURT: which of the twenty minor enemies are in the game (each its own file in Characters, built on
+-- ReplicatedStorage/GildedKit). Delete a name to cut that kind: its spots in GildedHeights.luau go to the others in this list.
+-- K menu: "Next Gilded enemy" takes you to each in turn, to look them over.
+-- (cut to the six that earn their place; the other fourteen's files are kept: GiltHalberdier, PorcelainDuelist, Almoner,
+-- Lamplighter, Chandelier, WindupFootman, Cupbearer, Herald, Tallyman, MirrorGuard, Arras, GildedFool, Falconer, Gilder)
+Config.GildedEnemies = {
+	"GiltSeraph", "Caryatid", "Topiarist", "Seneschal", "Oathsworn", "Dowager",
+}
+
+-- THE OLD KING, in the Gilded Ballroom (Characters/GildedKing): the Heights' king, father of all three keys' children. He doesn't fight.
+-- Intro plays once, in order; then More, round and round. Edit freely.
+Config.GildedKing = {
+	Name = "The Gilded King",
+	Intro = {
+		"Ah. A guest. Forgive me - nobody has come up the stair behind my throne in a very long time. Mind the floor; it's been polished.",
+		"Three keys, on a skeleton. I know them. I had them made, one for each of my children, so the stair to this land would open only when all three of them agreed.",
+		"They never once agreed. And yet here you are with all three. So one of them gave you theirs, one of them lost theirs, and one of them is still kneeling on the sand below, keeping a promise I never asked of him.",
+		"Caelen has my face, you know. Under that helm. He had my reach, too. Never my patience.",
+		"My eldest took the fire and called it a crown. And Ossaria... Ossaria kept everything she was ever given, and then everything she wasn't.",
+		"I held a ball in this room every year. Every year the same night, the same music, the same guests. They are still dancing, if you look closely. They've forgotten how to stop.",
+		"One thing more. In Pyralis's palace, across the mountain, there is a door he shut with my crown, the only seal he was sure would hold. Behind it is my daughter.",
+		"Take my blessing, little bones. It will open that door for you. ...I should not give it. I am giving it anyway.",
+	},
+	BlessAt = 8, -- (the Intro line he gives you his blessing on: KingsBlessing, which opens Map.ThroneSeal)
+	Blessing = "Received the King's Blessing.",
+	SealLocked = "Sealed. A gilded crown is worked into the lock, and it will not yield. It waits on a king's leave.",
+	SealOpens = "The King's blessing stirs in the seal. The door gives way.",
+	More = {
+		"Mind the court on your way down. They don't know they're dead, and they are very particular about invitations.",
+		"Go and see my son, if you like. Tell him the old man is still standing. He'll say nothing. He never does.",
+		"The music won't start again until you've gone. Don't let me keep you.",
+	},
 }
 
 -- Oculast, the Blinded Usher: optional miniboss behind the Ashen Yard's west wall.
@@ -727,9 +828,9 @@ Config.TownFog = {
 Config.Wick = {
 	Name = "Mabel",
 	Intro = {
-		"Oh! Someone came up the drain on bones, same as me. He he...",
+		"Oh! Someone came up the drain, same as me. He he...",
 		"I think you might get out of here if you try... the jailers have all gone quiet.",
-		"Don't mind the mud on these bones... He he he...",
+		"Don't mind the mud on me... He he he...",
 	},
 	More = {
 		"Oh, I almost forgot...",
@@ -743,7 +844,28 @@ Config.Wick = {
 	AfterWarden = "I'll have dark magics to teach you next time you return then..",
 	-- her gifts (Config.Armor): the Dark Cloak with CloakLine, the first time you talk to her
 	-- after her Intro; the Dark Hood with AfterUsher, once the Usher is dead
-	CloakLine = "You're shivering, bones and all. Take my old cloak... it likes the dark, and the dark likes it. He he...",
+	CloakLine = "You're shivering. Take my old cloak... it likes the dark, and the dark likes it. He he...",
+	-- the drain grate (Map.DrainGrate): CallOut the first time you pass her doorway; GrateLine right after her Intro
+	-- (it lets you lift the grate); GrateShut / GrateOpen at the grate itself
+	CallOut = "Psst... over here. Where the candles are. He he...",
+	GrateLine = "The big grate, where the drain comes out? Everybody pushes it. You have to lift, and then pull. He he... you'll see.",
+	GrateShut = "Rusted fast. It won't move, not the way you're pushing it. Back in the drain, someone's candle is lit...",
+	GrateOpen = "You lift, and pull. The grate grinds up out of its rust.",
+	-- Giles's questline: brought her ring (attribute MabelRing), she says these, one a talk; the last tells her
+	-- he's alive (MabelKnows) and sends you back to him. AfterGiles: once, after he's had the news
+	RingLines = {
+		"Oh... oh. Where did you find that? That's my ring. Grandpa Giles made it for me, and scratched the G in it, and the crown, because I asked him to...",
+		"I ran when the gate shut. Down and down, into the drains, and I never stopped being frightened long enough to die properly. He he...",
+		"He's alive? Grandpa's alive? Then you tell him... tell him I kept it. Tell him I'm here.",
+	},
+	-- once Giles is dead (GilesDead, or you carry his scrap: GilesScrap), one a talk; the last gives GriefGift (+1 Nobility)
+	GriefLines = {
+		"You're very quiet. Where's Grandpa? He's coming, isn't he? He said...",
+		"Oh. Oh, that's his stitching. He always did his letters too big...",
+		"Ossaria. It was her, wasn't it. It's always her. She takes and takes and she never, ever fills up.",
+		"Stand up straight. Like he taught me. ...There. Now go and make her sorry. He he... he...",
+	},
+	GriefGift = "You feel more noble. (+1 Nobility)",
 }
 
 -- WRETCH GILES, in the shack by the Crossing in the rotted encampment. Edit freely.
@@ -764,6 +886,53 @@ Config.Taylor = {
 		"Put a few of them to rest for old Giles, and I'll sell you some armor! Fine stitching I promise.. He he...",
 		"Mind the bridge, though.. watch your footing..",
 	},
+	-- said once to anyone who comes near (from CallRange studs), so nobody walks past him
+	CallRange = 45,
+	CallOut = "Psst! Bones! Yes, you, rattling about out there! Over here, in the doorway! Come let old Giles have a look at you..",
+	-- after the armor, until the King's asked after him (then QuestKey gives the grand gate's key)
+	AfterArmor = {
+		"That motley suits you.. I made clothes for kings once, you know. Ha! Don't look at me like that.",
+		"Mind the bridge, though.. watch your footing..",
+	},
+	KeyItem = "Giles's Gate Key. Heavy, green, its teeth worn down. Wrapped in a scrap of cloth embroidered with a crown.",
+	-- once the King of Pyralis has asked you to find him (attribute KingAsked, from the King's last line): said at
+	-- either Giles, one a talk. The last starts the Mabel questline (attribute MabelQuest, talk count GilesKingTalk), and
+	-- is his reminder after that until you've found her ring
+	-- ...and from then on, at the shack, only the questline: the grand gate's key if you've not had it (QuestKey, no
+	-- armor first), his plea, the ring's news, and once Mabel's found, where to find him (ToGate)
+	QuestKey = "You'll need this to reach her. The grand gate's key - kept it all these years, never had the stomach to go back. Left of the old road to the colosseum.",
+	ToGate = "She's.. you found her? Don't tell me here - I'll be at the grand gate, in its passage. Tell me there. Go on, go on!",
+	KingLines = {
+		"Sir Pyralis? You've seen Sir Pyralis? And he.. asked after old Giles? Ha! After he shut the gate on the lot of us? Ha ha..",
+		"Devout, he called me? Ha! I prayed, bones. I prayed over every stitch of his coronation robes. Much good it did any of us..",
+		"...Funny. Those shoulders of yours.. I measured a hundred guardsmen for the gate watch, you know. Never mind me, bones. Never mind me..",
+		"Tell him I'm alive, if you like. But there's something I want more than a king's apology.. Someone I've been too frightened to go looking for, all these years.",
+		"My granddaughter. Little Mabel. She was up at the palace when the gate shut, proud as anything..",
+		"I made her a ring! Too big for her - she wore it on a string round her neck. If anything of her is left, it'll be up there, past the grand gate. Find out what became of her, bones. Please.",
+	},
+	-- WRETCH GILES AGAIN, sat in the grand gate's passage once you've opened it (he knows the servants' ways in)
+	Wood = {
+		CallOut = "Ha! Took you long enough! Old Giles knows the servants' ways in.. come here, come here..",
+		Intro = {
+			"Smell that? That's Ossaria's court now. Rotting in its finery, the lot of them. I left before the gate shut. They didn't.",
+			"Ossaria.. the land's own child, the strongest of all of them, come down off the heights above the colosseum. Sir Pyralis let her in to cure the sickness. She was the sickness.",
+			"He shut the gate on her, at the end. Shut all of us in with her. She holds court in his palace now, and nobody she's had ever leaves it.",
+		},
+		-- you've found her ring (the palace's armoury), but not her
+		RingLine = "That's.. that's her ring. Where is she, then? A child that small, she'd hide somewhere low, and dark, and out of the way. Go and look, bones.",
+		-- Mabel knows he's alive (attribute MabelKnows): his joy; then Ossaria, who has heard him (OssariaLine, from her,
+		-- unseen) and his last words. He dies, for you (attribute GilesDead): his remains are left in the passage
+		ReunionLine = "She's.. she's alive? Down in the drains, on bones like you? Ha! Ha ha.. Oh, my little sparrow. I'm going to her. Right now, these knees or no-",
+		OssariaName = "Ossaria",
+		OssariaLine = "Leave? Oh, little tailor. Nobody leaves my court. You sewed for us. You'll rot for us.",
+		LastLine = "Tell.. tell my sparrow.. Grandpa came back..",
+		RemainsItem = "A scrap of Wretch Giles's coat, stitched in a hurry in black thread: \"Mabel. Grandpa came back for you.\" Mabel should have this.",
+		More = {
+			"Sir Pyralis had the gate shut to keep the sickness in. Kept himself in with it.. Ha!",
+			"Go careful in the palace. The guards still stand their posts. They don't know they're dead.",
+		},
+	},
+	RingItem = "Mabel's Ring. A little ring of brass, far too big for a child, on a frayed string. \"G\" is scratched inside it, and a crown, badly.",
 }
 
 -- THE OLD HAG, shut in behind the tunnel door at the end of the high bridge (Characters/Hag).
@@ -781,6 +950,107 @@ Config.Hag = {
 	More = {
 		"Fire cleanses the rot, little bones.. remember that..",
 		"Dry old wood chokes the way west of here.. it would burn so nicely..",
+	},
+}
+
+-- Ossaria, under the Decayed Palace (its pit, where Pyralis's throne lift was): waiting in her court, her back to you.
+-- Her bar shows full while you're there (init.server); she never strikes. Walk up to her and the meeting plays
+-- (GameServer/Ossaria): Lines over it in turn, Parting as she flies, and she's gone up the pit. HP: for when she fights.
+Config.Ossaria = {
+	Name = "Ossaria, Exiled Heir",
+	HP = 1500, -- her own first bar (phase 2: her true body). Her husk's, before it, is Knight.HP; her last is HP3
+	HP3 = 1500, -- her second bar (phase 3: the great hands), under Name3
+	Lines = {
+		"...Young skeleton.",
+		"Do you not remember? The life you had... before I made you?",
+		"You were a soldier of that prince... Pyralis. Proud. Loyal. Burning, like everything of his.",
+		"I unmade you. I made you a soldier of decay... so far from what you were, he would not know your face.",
+		"And look at what you have done with it. You cut down both of my brothers... the last swords guarding the Gilded Heights.",
+		"Then you came down here, into the dark... and broke the seal Pyralis laid on me.",
+		"...What a convenient skeleton you are.",
+	},
+	Parting = "Rest a while, little bones. You will need it.",
+	-- challenged on the ruined colosseum's sand (Ossaria.luau): her line, then Caelen up out of it on her strings, and
+	-- the Husk he fights as (the Silver Knight's first-phase moves: Champion.luau's husk; damage before its DamageScale)
+	Challenge = "I suppose you feel tricked, carrying out my every whim as a shell of my own creation... well, my favorite helper, allow me to grant you a proud martyr's death.",
+	Risen = "Dearest Caelen, your Husk will fight once more.", -- (as he comes up out of the sand)
+	-- the husk beaten: she sheds her cloak (Characters/OssariaHeir) and says this, then comes down to you
+	Unveiled = "Caelen died in silver, and again in dust. Come, little bones... let us see what you die in.",
+	-- HER OWN FIGHT (Characters/OssariaHeir), once the husk is down. Phase 2: her true body, on the bar HP (above).
+	-- Phase 3, when it's empty: the great hands out of her back, a new bar (HP3) and this name. Each has a cutscene
+	-- the first time only (Saves "OssariaUnveiled", "OssariaHand"); after that she says Again / Again3 and gets on with it.
+	Name3 = "Ossaria, Hand of Decay",
+	Again = "Again, little bones? You do wear so well.",
+	Phase3 = {
+		"...Clever little bones. You cut like the soldier you were.",
+		"I made you with these hands. Did you think I only had two?",
+		"Now. See what you die in.",
+	},
+	Again3 = "Did you think I only had two?",
+	Dying = "Ah... so that is what I made. Wear it well... little bones.",
+	Fight = {
+		Poise = 260, Stagger = 1.5, WalkSpeed = 13, WalkSpeed3 = 16,
+		Tempo3 = 0.8, -- every tell and recovery of hers is this much shorter in phase 3
+		Face3 = 21, -- which of OssariaHeir's M.Faces she bares in phase 3 (the Sunburst)
+		Head3 = 1.6, -- ...and how many times the size of her first face it is
+		-- (every cut of hers - the rake's two, the frenzy's - is a lunge at you of up to its Step, its reach shown
+		-- on the sand for the last moment of its wind-up)
+		-- the rake: a talon across from each side (RakeArc degrees either way), then both brought down: a blast
+		-- SlamRadius round a spot SlamReach ahead of her
+		RakeTell = 0.85, RakeStep = 12, RakeRange = 15, RakeArc = 75, RakeDamage = 22, RakeRecover = 1.1,
+		SlamTell = 0.7, SlamReach = 9, SlamRadius = 8, SlamDamage = 34,
+		-- the pounce: down on her haunches for PounceTell, then onto where you stand
+		PounceTell = 0.7, PounceTime = 0.75, PounceHeight = 12, PounceRadius = 9, PounceDamage = 36, PounceRecover = 1.2,
+		StringGap = 1.5, -- every string of hers (the fan's, the cradle's) is three side by side, this far apart: the widths below cover all three
+		-- her strings: ThreadCount laid along the sand in a fan (ThreadSpread radians apart), drawn taut ThreadTell
+		-- later: each cuts ThreadWidth either side of it
+		ThreadCount = 5, ThreadSpread = 0.2, ThreadLength = 70, ThreadWidth = 2.6, ThreadTell = 0.5, ThreadDamage = 20, ThreadRecover = 0.9,
+		-- the pull: a string onto you, yanked PullTell later (roll through the yank): dragged to about PullTo studs
+		-- from her (PullSpeed: the throw's speed per stud to go), and her talons come down PullSlamTell after
+		PullTell = 0.9, PullTo = 9, PullSpeed = 7, PullDamage = 10, PullSlamTell = 0.75, PullRecover = 1.0,
+		-- wells of rot under you, one every WellGap; each erupts WellDelay after it shows
+		Wells = 3, Wells3 = 5, WellGap = 0.45, WellRadius = 6.5, WellDelay = 1, WellDamage = 28, WellRecover = 0.8,
+		Stride = 7, -- every this many studs she covers on her own feet: a footfall (dust, a thud, the ground under you)
+		Lull2 = { 0.15, 0.5 }, -- phase 2: the seconds she stalks round you between moves (phase 3: 0.4..1, at its tempo)
+		-- the frenzy: a shriek (FrenzyTell), then FrenzyCuts talons one after another, each on a lunge of up to
+		-- FrenzyStep at you, FrenzyBeat apart - or, FrenzyHang of the time, hung wound up for FrenzyLong first
+		FrenzyTell = 0.55, FrenzyCuts = { 5, 7 }, FrenzyBeat = 0.52, FrenzyLong = 0.9, FrenzyHang = 0.3, FrenzyStep = 17,
+		FrenzyRange = 13, FrenzyArc = 70, FrenzyDamage = 14, FrenzySlamTell = 0.5, FrenzyRecover = 1.6,
+		-- the hounding: up to HoundLeaps leaps onto you, the first after HoundTell, the rest HoundBeat off the landing
+		HoundLeaps = 3, HoundTell = 0.6, HoundBeat = 0.3, HoundTime = 0.55, HoundHeight = 10, HoundRadius = 8, HoundDamage = 30, HoundRecover = 1.3,
+		-- the dirge: her talons held up over her for anywhere in DirgeHold, then the slam (the rake's), and
+		-- DirgeWells wells in a line on from it, one after another
+		DirgeHold = { 0.45, 1.3 }, DirgeWells = 5, DirgeRadius = 4.5, DirgeDamage = 24, DirgeRecover = 1.2,
+		-- the wheel (when you're in under her): spun twice on the spot, arms out: WheelRadius round her, once a turn
+		WheelTell = 0.6, WheelTime = 0.75, WheelRadius = 11, WheelTravel = 8, WheelDamage = 26, WheelRecover = 1.3,
+		-- the skitter: round you on all fours for SkitterTime at SkitterSpeed, then a lunge up to SkitterLunge long
+		SkitterSpeed = 34, SkitterTime = 1.1, SkitterTell = 0.35, SkitterLunge = 24, SkitterDamage = 30, SkitterRecover = 1.1,
+		-- the cat's cradle: CradleCount strings (2 more in phase 3) flicked out pillar to pillar across where you
+		-- stand, one every CradleGap; each cuts CradleWidth either side of it, CradleTell after it's strung
+		CradleCount = 5, CradleGap = 0.3, CradleTell = 0.7, CradleWidth = 2.6, CradleDamage = 20, CradleRecover = 0.9,
+		-- phase 3, the great hands: one, the other, then both (radius and damage x HandBoth), on a spot up to
+		-- HandReach from her (they're about 20 long: much past 15 and they can't touch the sand)
+		HandTell = 0.85, HandReach = 15, HandRadius = 8, HandDamage = 40, HandBoth = 1.3, HandRecover = 1.2,
+		-- phase 3, the scour: a great hand dragged round her front, side to side: everything within ScourReach (+3)
+		ScourTell = 1.1, ScourTime = 0.85, ScourReach = 15, ScourDamage = 36, ScourRecover = 1.3,
+		-- phase 3, the hurl: HurlCount pieces off the wreck turning overhead, each HurlTell on her string, then
+		-- HurlFall on its way to you
+		HurlCount = 3, HurlTell = 0.55, HurlFall = 0.7, HurlRadius = 6, HurlDamage = 32, HurlRecover = 1.0,
+		-- phase 3, the loom: hung LoomHeight over the middle of the sand, a web off the pillars: its spokes drawn
+		-- taut LoomTell after it's strung, then LoomRings rings (one every LoomRingGap, each shown LoomRingTell
+		-- first) drawn in from the pillars to the middle over LoomSweep; then she drops into the middle
+		LoomHeight = 9, LoomTell = 1.2, LoomWidth = 1.6, LoomDamage = 26, LoomRings = 3, LoomRingTell = 0.5, LoomSweep = 1.5, LoomRingGap = 1.0,
+		LoomSlamRadius = 12, LoomSlamDamage = 44, LoomRecover = 2.0,
+		-- phase 3, the sky pulled down: SkyCount pieces of the Heights, one every SkyGap, every third one on you;
+		-- each takes SkyFall to land
+		SkyTell = 1.2, SkyCount = 9, SkyGap = 0.4, SkyFall = 1.3, SkyRadius = 7, SkyDamage = 38, SkyRecover = 1.0,
+	},
+	Knight = {
+		Name = "Ossaria's Last Knight",
+		HP = 1200,
+		-- the holes of decay: every Every[1]..Every[2] seconds one opens under you, its centre 0..Radius studs from your
+		-- feet (so its edge always reaches them); Delay seconds after it shows it erupts, the only moment it hurts
+		Hole = { Every = { 5, 10 }, Radius = 7, Delay = 1, Damage = 30 },
 	},
 }
 

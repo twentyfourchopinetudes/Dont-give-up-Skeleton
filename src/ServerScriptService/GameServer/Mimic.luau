@@ -479,7 +479,11 @@ function Mimic.init(core)
 		}
 	end)
 
+	core.Save.on("Mimic", function() -- (killed in this save: dead again, as it was left)
+		hum.Health = 0
+	end)
 	hum.Died:Connect(function()
+		core.Save.mark("Mimic")
 		M.alive = false
 		M.awake = false
 		model.Parent = workspace -- (out of the enemies: no locking onto a corpse)

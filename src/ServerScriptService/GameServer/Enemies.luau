@@ -10,8 +10,9 @@ local Enemies = {}
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local PathfindingService = game:GetService("PathfindingService")
+local Decay = require(script.Parent:WaitForChild("Decay"))
 local Map, EnemiesFolder, Roster
-local now, flat, playSound, SOUNDS, burst, pose, setTrail, faceTowards, findShoulder, makeRig, makeCorpse, ragdoll, aliveChar
+local now, flat, playSound, SOUNDS, burst, pose, setTrail, faceTowards, findShoulder, makeRig, makeCorpse, ragdoll, aliveChar, giveWeapon
 
 local enemyList = {}
 local enemyByModel = {}
@@ -42,7 +43,10 @@ local function findTarget(e)
 			local d = (hrp.Position - e.root.Position).Magnitude
 			local range = e.aggro and e.def.Aggro * 1.6 or e.def.Aggro
 			if d <= range and (bestD == nil or d < bestD) then
-				if e.aggro or canSee(e.root.Position + Vector3.new(0, 1.5, 0), char) then
+				-- (once it's after you it follows you round corners unseen, but not to another floor: a floor down, out of
+				-- sight, it gives up - nothing left swinging at the ceiling under the Consul's attic)
+				local otherFloor = math.abs(hrp.Position.Y - e.root.Position.Y) > 10
+				if (e.aggro and not otherFloor) or canSee(e.root.Position + Vector3.new(0, 1.5, 0), char) then
 					best, bestD = char, d
 				end
 			end
@@ -199,6 +203,11 @@ local function spawnEnemy(spec)
 		def.Scale *= 1.15
 		def.Radius *= 1.15
 	end
+	if spec.Decayed then -- (the Decayed Palace's: the same kind gone to rot, tankier and slower)
+		def = table.clone(def)
+		def.HP *= 1.5
+		def.Speed *= 0.75
+	end
 	local model, hum, weld = makeRig(spec.Type, spec.Type, def.Scale, def.Weapon)
 	if not model then
 		return nil
@@ -235,7 +244,23 @@ local function spawnEnemy(spec)
 		attacking = false,
 		returning = false,
 		staggerUntil = 0,
+		idleGrip = def.IdleGrip, -- (a weapon with a rest of its own, e.g. the Cinder Knight's halberd: pose "Idle" goes there)
 	}
+	if def.Weapon2 then -- (a second weapon in the left hand: the Furnace Brute's other hammer; its grips "L<name>" or mirrored)
+		e.weld2 = giveWeapon(model, def.Weapon2, def.Scale, true)
+	end
+	if def.IdleGrip then
+		pose(e, "Idle", 0.05)
+	end
+	if spec.Decayed then
+		Decay.apply(model)
+	end
+	if char.onSpawn then -- (its own setting-up: e.g. the King of Pyralis, kneeling, waiting for you)
+		local ok, err = pcall(char.onSpawn, e)
+		if not ok then
+			warn("[DGUS] onSpawn error: " .. tostring(err))
+		end
+	end
 	enemyByModel[model] = e
 	hum.Died:Connect(function()
 		onEnemyDied(e)
@@ -244,6 +269,7 @@ local function spawnEnemy(spec)
 	return e
 end
 
+local respawnHooks = {}
 local function respawnEnemies()
 	for _, e in ipairs(enemyList) do
 		e.alive = false
@@ -265,10 +291,48 @@ local function respawnEnemies()
 			warn("[DGUS] failed to spawn " .. tostring(spec.Type) .. ": " .. tostring(e))
 		end
 	end
+	for _, fn in ipairs(respawnHooks) do
+		local ok, err = pcall(fn)
+		if not ok then
+			warn("[DGUS] onRespawn: " .. tostring(err))
+		end
+	end
 end
 
 function Enemies.respawn()
 	respawnEnemies()
+end
+-- (Ambush.luau) one more enemy, not of the map's own spawns: it lives and dies like the rest, and is gone with them
+-- at the next respawn - when fn (onRespawn) is told, to set whatever made it again
+function Enemies.spawn(spec)
+	local ok, e = pcall(spawnEnemy, spec)
+	if ok and e then
+		table.insert(enemyList, e)
+		return e
+	elseif not ok then
+		warn("[DGUS] failed to spawn " .. tostring(spec.Type) .. ": " .. tostring(e))
+	end
+	return nil
+end
+function Enemies.onRespawn(fn)
+	table.insert(respawnHooks, fn)
+end
+-- gone(position): their ground's gone (HeightsRuin) - the spawns there dropped, and whoever's up there now with them
+function Enemies.cull(gone)
+	for i = #Map.EnemySpawns, 1, -1 do
+		if gone(Map.EnemySpawns[i].CFrame.Position) then
+			table.remove(Map.EnemySpawns, i)
+		end
+	end
+	for i = #enemyList, 1, -1 do
+		local e = enemyList[i]
+		if gone(e.home.Position) then
+			e.alive = false
+			enemyByModel[e.model] = nil
+			e.model:Destroy()
+			table.remove(enemyList, i)
+		end
+	end
 end
 function Enemies.count()
 	return #enemyList
@@ -281,7 +345,7 @@ function Enemies.init(core)
 	Map, EnemiesFolder, Roster = core.Map, core.EnemiesFolder, core.Roster
 	now, flat, playSound, SOUNDS, burst, pose, setTrail = core.now, core.flat, core.playSound, core.SOUNDS, core.burst, core.pose, core.setTrail
 	faceTowards, findShoulder = core.faceTowards, core.findShoulder
-	makeRig, makeCorpse, ragdoll, aliveChar = core.makeRig, core.makeCorpse, core.ragdoll, core.aliveChar
+	makeRig, makeCorpse, ragdoll, aliveChar, giveWeapon = core.makeRig, core.makeCorpse, core.ragdoll, core.aliveChar, core.giveWeapon
 	losParams.FilterDescendantsInstances = { EnemiesFolder, Map.Bars }
 	-- hits on a regular enemy: poise, a stagger (any hit staggers the weak ones), knockback
 	core.registerTarget(function(model)

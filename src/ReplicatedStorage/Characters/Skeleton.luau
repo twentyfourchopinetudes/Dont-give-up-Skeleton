@@ -1,7 +1,10 @@
 --!nonstrict
 -- SKELETON: a jailer's remains that never stopped walking. Twitchy, brittle.
 -- Up close: a slow, rattling, telegraphed swipe - or the same rattle cut short into
--- a quick stab (the feint). From range: a coiled lunging thrust. Then a hop back.
+-- a quick stab (the feint) - or two quick cuts, there and back; and as often as not a
+-- skip sideways first, so it doesn't come from where it stood. From a little off: a
+-- coiled lunging thrust, or a leap and a chop down. From further: one of its own ribs
+-- pulled out and thrown, or a scuttle in and the lunge off the end of it. Then a hop back.
 --
 -- EVERYTHING ABOUT THIS CHARACTER IS IN THIS ONE FILE:
 --   M.Proportions / M.Poses   body shape and its full-body poses (the client animator uses these too)
@@ -193,15 +196,19 @@ M.Def = {
 	HP = 48, Speed = 12.5, Scale = 1, Damage = 13, Range = 5.2, HalfAngle = 70,
 	Windup = 0.4, Recover = 0.75, Aggro = 30, Leash = 55, Stagger = 0.95,
 	HyperArmor = false, Weapon = "Scimitar", Radius = 1.1, Lunge = 10,
-	Poise = 1, HitLevel = "Small", StaggerPush = 26, Engage = 10.5,
+	Poise = 1, HitLevel = "Small", StaggerPush = 26, Engage = 17, -- (from 17 off: the thrown bone, or the scuttle in)
 	LungeDamage = 22, Moves = "Skeleton",
 	SwipeDamage = 28, SwipeWindup = 0.95, -- the slow swipe: raised and held this long, then a wide heavy cut
+	ComboDamage = 12, -- each of the two quick cuts
+	LeapDamage = 24, -- the leap's chop
+	ThrowDamage = 12, ThrowEvery = 5, ThrowSpeed = 55, -- a thrown rib: no more often than this, each of them
 }
 
 ---------------------------------------------------------------------------
 -- server: how it fights
 ---------------------------------------------------------------------------
-local pose, playSound, SOUNDS, now, faceTowards, setTrail, flat, playersInSector, damagePlayer, burst, bodyPose
+local pose, playSound, SOUNDS, now, faceTowards, setTrail, flat, playersInSector, damagePlayer, burst, bodyPose, playersInRadius
+local RunService = game:GetService("RunService")
 
 -- SKELETON moveset. Each step checks for a stagger: they break out of anything.
 local function skelHold(e, duration, faceTarget)
@@ -364,6 +371,116 @@ local function skelLunge(e, tRoot)
 	return true
 end
 
+-- TWO QUICK CUTS: across, and straight back the way it came, a step into each
+local function skelCombo(e, tRoot)
+	local def, root = e.def, e.root
+	pose(e, "SweepBack", 0.22)
+	bodyPose(e, "SweepWindup", 0.22)
+	playSound(root, SOUNDS.Unsheath, 0.35, 1.1)
+	if not skelHold(e, 0.34, tRoot) then
+		return false
+	end
+	for i = 1, 2 do
+		setTrail(e, true)
+		playSound(root, SOUNDS.Slash, 0.55, 1.1 + i * 0.15)
+		pose(e, i == 1 and "SweepEnd" or "SweepBack", 0.1)
+		bodyPose(e, i == 1 and "SweepEnd" or "SweepWindup", 0.12)
+		skelStep(e, flat(root.CFrame.LookVector), 2.5, 0.14)
+		task.wait(0.07)
+		skelHit(e, def.Range + 0.8, 80, def.ComboDamage, "Small")
+		setTrail(e, false)
+		if i == 1 and not skelHold(e, 0.26, tRoot) then -- (the beat between them: it turns with you)
+			return false
+		end
+	end
+	e.hum:MoveTo(root.Position)
+	return true
+end
+
+-- THE LEAP: sunk on its haunches, the blade up over its head, then up and at you and the blade down
+local function skelLeap(e, tRoot)
+	local def, root = e.def, e.root
+	pose(e, "Raise", 0.3)
+	bodyPose(e, "Crouch", 0.3)
+	playSound(root, SOUNDS.Unsheath, 0.4, 0.7)
+	if not skelHold(e, 0.5, tRoot) then
+		return false
+	end
+	local d = flat(tRoot.Position - root.Position)
+	bodyPose(e, "Air", 0.1)
+	playSound(root, SOUNDS.Lunge, 0.5, 1.0)
+	skelStep(e, d, math.clamp(d.Magnitude - 2.5, 2, 9), 0.3)
+	if not skelHold(e, 0.24, nil) then
+		return false
+	end
+	setTrail(e, true)
+	pose(e, "Strike", 0.07)
+	bodyPose(e, "Strike", 0.08)
+	task.wait(0.07)
+	skelHit(e, def.Range + 1.2, 45, def.LeapDamage, "Large")
+	burst(root.Position + flat(root.CFrame.LookVector) * 3 - Vector3.new(0, 2.5, 0), Color3.fromRGB(105, 98, 88), 10, 0.3, 10)
+	task.wait(0.1)
+	setTrail(e, false)
+	e.hum:MoveTo(root.Position)
+	return true, def.Recover * 1.3
+end
+
+-- A RIB, THROWN: reared right back, a rattle, and it comes spinning straight at where you were
+local function skelThrow(e, tRoot)
+	local def, root = e.def, e.root
+	pose(e, "SkelHigh", 0.3)
+	bodyPose(e, "SkelReach", 0.3)
+	skelEyes(e, true)
+	playSound(root, SOUNDS.Unsheath, 0.35, 1.5)
+	local ok = skelHold(e, 0.6, tRoot)
+	skelEyes(e, false)
+	if not ok then
+		return false
+	end
+	pose(e, "SweepEnd", 0.08)
+	bodyPose(e, "SweepEnd", 0.1)
+	playSound(root, SOUNDS.Slash, 0.5, 1.5)
+	local from = root.Position + Vector3.new(0, 1.5, 0)
+	local dir = tRoot.Position - from
+	dir = dir.Magnitude > 0.1 and dir.Unit or root.CFrame.LookVector
+	local rib = Instance.new("Part")
+	rib.Name = "ThrownRib"
+	rib.Size, rib.Color, rib.Material = Vector3.new(0.3, 0.3, 1.7), Color3.fromRGB(178, 168, 142), Enum.Material.SmoothPlastic
+	rib.Anchored, rib.CanCollide, rib.CanQuery, rib.CanTouch = true, false, false, false
+	rib.CFrame = CFrame.lookAt(from, from + dir)
+	rib.Parent = workspace
+	task.spawn(function()
+		local t0, at = now(), from
+		while now() - t0 < 0.65 do
+			local dt = RunService.Heartbeat:Wait()
+			at += dir * def.ThrowSpeed * dt
+			rib.CFrame = CFrame.lookAt(at, at + dir) * CFrame.Angles((now() - t0) * 22, 0, 0)
+			local hit = playersInRadius(at, 1.4, 3)[1]
+			if hit then
+				damagePlayer(hit, def.ThrowDamage, from, "Small")
+				burst(at, Color3.fromRGB(178, 168, 142), 8, 0.25, 10)
+				break
+			end
+		end
+		rib:Destroy()
+	end)
+	return true, def.Recover * 0.6
+end
+
+-- a skip to one side of where it stood, its face still on you (before the close ones, as often as not)
+local function skelSkip(e, tRoot)
+	local root = e.root
+	local to = flat(tRoot.Position - root.Position)
+	if to.Magnitude < 0.1 then
+		return true
+	end
+	local side = Vector3.new(-to.Z, 0, to.X).Unit * (math.random() < 0.5 and 1 or -1)
+	bodyPose(e, "SkelHop", 0.08)
+	playSound(root, SOUNDS.Unsheath, 0.25, 1.7)
+	skelStep(e, side + to.Unit * 0.3, 4, 0.2)
+	return skelHold(e, 0.22, tRoot)
+end
+
 function M.attack(e, targetChar)
 	local def, hum, root = e.def, e.hum, e.root
 	local tRoot = targetChar:FindFirstChild("HumanoidRootPart")
@@ -376,12 +493,33 @@ function M.attack(e, targetChar)
 	faceTowards(root, tRoot.Position)
 	local d = flat(tRoot.Position - root.Position).Magnitude
 	local ok, recover
-	if d > def.Range + 1.5 then
-		ok = skelLunge(e, tRoot) -- from range: the coiled lunge
-	elseif math.random() < 0.35 then
-		ok = skelFeint(e, tRoot)
-	else
-		ok, recover = skelSwipe(e, tRoot)
+	if d > 10.5 then -- well off: a rib thrown, or a scuttle in to lunge off the end of
+		if now() >= (e.throwAt or 0) and math.random() < 0.6 then
+			e.throwAt = now() + def.ThrowEvery
+			ok, recover = skelThrow(e, tRoot)
+		else
+			bodyPose(e, "SkelCoil", 0.15)
+			skelStep(e, flat(tRoot.Position - root.Position), d - 8, (d - 8) / 22)
+			ok = skelHold(e, (d - 8) / 22, tRoot) and skelLunge(e, tRoot)
+		end
+	elseif d > def.Range + 1.5 then -- a little off: the coiled lunge, or the leap
+		if math.random() < 0.4 then
+			ok, recover = skelLeap(e, tRoot)
+		else
+			ok = skelLunge(e, tRoot)
+		end
+	else -- up close: as often as not a skip to one side first; then the swipe, its feint, or the two quick cuts
+		ok = math.random() >= 0.4 or skelSkip(e, tRoot)
+		if ok then
+			local r = math.random()
+			if r < 0.3 then
+				ok = skelFeint(e, tRoot)
+			elseif r < 0.6 then
+				ok = skelCombo(e, tRoot)
+			else
+				ok, recover = skelSwipe(e, tRoot)
+			end
+		end
 	end
 	if ok and e.alive then
 		-- recovery (punish it), then often a skittering hop back out of reach
@@ -416,6 +554,7 @@ end
 
 function M.init(core)
 	pose, playSound, SOUNDS, now, faceTowards, setTrail, flat, playersInSector, damagePlayer, burst, bodyPose = core.pose, core.playSound, core.SOUNDS, core.now, core.faceTowards, core.setTrail, core.flat, core.playersInSector, core.damagePlayer, core.burst, core.bodyPose
+	playersInRadius = core.playersInRadius
 end
 
 return M

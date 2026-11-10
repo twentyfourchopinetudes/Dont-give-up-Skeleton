@@ -1030,6 +1030,7 @@ local function onDied(b)
 		return
 	end
 	boss.state = "dead"
+	Core.Save.mark("Castellan")
 	ReplicatedStorage:SetAttribute("BossActive", false)
 	ReplicatedStorage:SetAttribute("Music", "victory")
 	FxRemote:FireAllClients("Banner", "CASTELLAN FELLED", "Victory")
@@ -1194,6 +1195,7 @@ local function start()
 	task.spawn(function()
 		if not boss.seen then
 			boss.seen = true
+			Core.Save.mark("CastellanSeen")
 			if not cutscene(b) then
 				return
 			end
@@ -1338,7 +1340,19 @@ function M.init(core)
 	end)
 end
 
-M.spawn = spawn
+M.spawn = function()
+	boss.seen = boss.seen or Core.Save.done("CastellanSeen") -- (his cutscene: only ever the first time)
+	if not Core.Save.done("Castellan") then
+		return spawn()
+	end
+	-- felled in this save: gone, the bell's rope to hand
+	boss.state = "dead"
+	Map.Bell.Prompt.Enabled = true
+	local pl = Core.Save.player
+	if pl and not pl:GetAttribute("Has_CastellanMace") then -- shortcut: a mace left lying on his roof isn't put back there; it's simply yours
+		pl:SetAttribute("Has_CastellanMace", true)
+	end
+end
 M.reset = reset
 M.devWound = function() -- (dev menu) one hit from death
 	if boss.hum and boss.hum.Health > 0 then

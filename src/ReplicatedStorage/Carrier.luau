@@ -39,7 +39,16 @@ function Carrier.crawlTime(plan)
 end
 
 function Carrier.total(plan)
-	return Carrier.CLIMB + Carrier.CREST + Carrier.crawlTime(plan) + Carrier.GRAB + Carrier.FLY + Carrier.LEAVE
+	return Carrier.CLIMB + Carrier.CREST + Carrier.crawlTime(plan) + Carrier.GRAB + Carrier.FLY + Carrier.LEAVE + (plan.pauseFor or 0)
+end
+
+-- the trip's clock with its pause taken out (plan.pauseAt, .pauseFor: it hangs in the air there while the first
+-- trip's cutscene has the camera, GameServer/Carrier)
+function Carrier.pathTime(plan, t)
+	if plan.pauseAt and t > plan.pauseAt then
+		return math.max(plan.pauseAt, t - plan.pauseFor)
+	end
+	return t
 end
 
 -- the flight: up from the deck in a long arc over the township, down to just above the landing
@@ -420,7 +429,7 @@ function Carrier.play(plan)
 			return
 		end
 		local ok, err = pcall(function()
-			local cf, mode, reach = Carrier.at(plan, t)
+			local cf, mode, reach = Carrier.at(plan, Carrier.pathTime(plan, t))
 			draw(c, rnd, cf, mode, t, now - last, reach)
 		end)
 		last = now
@@ -620,6 +629,7 @@ function Carrier.cloth()
 		end
 		local n, len, w = anchor:GetAttribute("Segs") or 5, anchor:GetAttribute("Len") or 1, anchor:GetAttribute("Width") or 1
 		local col = anchor:GetAttribute("Color") or Color3.fromRGB(90, 20, 20)
+		local mat = Enum.Material[anchor:GetAttribute("Material") or "Fabric"] -- (optional, by name: e.g. the Warden's mail)
 		-- (optional per-chain physics, so stacked layers move differently: Drag, Gravity = a multiple of
 		-- the default, Out = how far off the body it's kept)
 		local c = {
@@ -633,7 +643,7 @@ function Carrier.cloth()
 			p.Name = "Cloth"
 			p.Size = Vector3.new(w * (1 - 0.2 * (i - 1) / n), len + 0.15, 0.12)
 			p.Color = col:Lerp(Color3.new(), 0.08 * i)
-			p.Material = Enum.Material.Fabric
+			p.Material = mat
 			p.Anchored = true
 			p.CanCollide, p.CanQuery, p.CanTouch = false, false, false
 			p.Parent = folder
